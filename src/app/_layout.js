@@ -26,6 +26,11 @@ import {
 } from '@expo-google-fonts/inter';
 
 import {
+  SafeAreaProvider,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import {
   AuthProvider,
   useAuth,
 } from '../context/AuthContext';
@@ -79,16 +84,20 @@ export default function RootLayout() {
 
 
   return (
+    <SafeAreaProvider>
 
-    <AuthProvider>
+      <AuthProvider>
 
-      <StatusBar
-        style="dark"
-      />
+        <StatusBar
+          style="dark"
+          translucent={false}
+        />
 
-      <RootNavigator />
+        <RootNavigator />
 
-    </AuthProvider>
+      </AuthProvider>
+
+    </SafeAreaProvider>
   );
 }
 
@@ -111,6 +120,10 @@ function RootNavigator() {
   } =
     useAuth();
 
+
+  // =======================================================
+  // AUTH ROUTING
+  // =======================================================
 
   useEffect(() => {
 
@@ -141,9 +154,9 @@ function RootNavigator() {
     );
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // NOT AUTHENTICATED
-    // -----------------------------------------------------
+    // =====================================================
 
     if (
       !isAuthenticated &&
@@ -158,9 +171,9 @@ function RootNavigator() {
     }
 
 
-    // -----------------------------------------------------
+    // =====================================================
     // AUTHENTICATED
-    // -----------------------------------------------------
+    // =====================================================
 
     if (
       isAuthenticated &&
@@ -170,6 +183,7 @@ function RootNavigator() {
       router.replace(
         '/'
       );
+
     }
 
   }, [
@@ -178,6 +192,10 @@ function RootNavigator() {
     pathname,
   ]);
 
+
+  // =======================================================
+  // LOADING
+  // =======================================================
 
   if (loading) {
 
@@ -200,22 +218,38 @@ function RootNavigator() {
   }
 
 
+  // =======================================================
+  // ROOT STACK
+  // =======================================================
+
   return (
-
-    <Stack
-      screenOptions={{
-        headerShown: false,
-
-        animation:
-          'slide_from_right',
-
-        contentStyle: {
-          backgroundColor:
-            colors.background,
-        },
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor:
+          colors.background,
       }}
-    />
+      edges={[
+        'top',
+        'bottom',
+      ]}
+    >
 
+      <Stack
+        screenOptions={{
+          headerShown: false,
+
+          animation:
+            'slide_from_right',
+
+          contentStyle: {
+            backgroundColor:
+              colors.background,
+          },
+        }}
+      />
+
+    </SafeAreaView>
   );
 }
 
@@ -239,4 +273,5 @@ const styles = {
     justifyContent:
       'center',
   },
+
 };

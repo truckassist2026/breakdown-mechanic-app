@@ -1,7 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
 import {
+  useEffect,
+  useState,
+} from 'react';
+
+import {
+  ActivityIndicator,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,179 +13,887 @@ import {
   View,
 } from 'react-native';
 
+import {
+  Ionicons,
+} from '@expo/vector-icons';
+
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
+import {
+  getMechanicRequestById,
+} from '../services/mechanicApi';
+
+
+// =========================================================
+// HELPERS
+// =========================================================
+
+function getInitials(name) {
+
+  if (!name) {
+    return 'DR';
+  }
+
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase()
+    )
+    .join('');
+}
+
+
+function getServiceName(category) {
+
+  const map = {
+    BATTERY: 'Battery Assistance',
+    TYRE: 'Tyre Issue',
+    FUEL: 'Fuel Assistance',
+    BREAKDOWN: 'Breakdown Assistance',
+    TOWING: 'Towing Assistance',
+  };
+
+  return (
+    map[String(category || '').toUpperCase()] ||
+    category ||
+    'Service Request'
+  );
+}
+
+
+function formatVehicle(vehicle) {
+
+  if (!vehicle) {
+    return 'Vehicle details unavailable';
+  }
+
+  const manufacturer =
+    vehicle.manufacturer || '';
+
+  const model =
+    vehicle.model || '';
+
+  const registration =
+    vehicle.registrationNumber || '';
+
+  const vehicleName =
+    [manufacturer, model]
+      .filter(Boolean)
+      .join(' ');
+
+  if (
+    vehicleName &&
+    registration
+  ) {
+    return `${vehicleName} • ${registration}`;
+  }
+
+  return (
+    vehicleName ||
+    registration ||
+    'Vehicle details unavailable'
+  );
+}
+
+
+function formatDistance(distanceKm) {
+
+  if (
+    distanceKm === null ||
+    distanceKm === undefined ||
+    Number.isNaN(Number(distanceKm))
+  ) {
+    return 'Distance unavailable';
+  }
+
+  const distance =
+    Number(distanceKm);
+
+  if (distance < 1) {
+    return `${distance.toFixed(1)} km away`;
+  }
+
+  return `${distance.toFixed(1)} km away`;
+}
+
+
+function calculateEta(distanceKm) {
+
+  if (
+    distanceKm === null ||
+    distanceKm === undefined
+  ) {
+    return null;
+  }
+
+  const distance =
+    Number(distanceKm);
+
+  if (Number.isNaN(distance)) {
+    return null;
+  }
+
+  // Approximate UI ETA only.
+  // Real routing/ETA can be added later.
+  const minutes =
+    Math.max(
+      2,
+      Math.round(
+        distance * 4
+      )
+    );
+
+  return minutes;
+}
+
+
+// =========================================================
+// ACTIVE SCREEN
+// =========================================================
+
 export default function ActiveScreen() {
-  const router = useRouter();
-  const { requestId } = useLocalSearchParams();
 
-  const [arrived, setArrived] = useState(false);
+  const router =
+    useRouter();
 
-  const handleNext = () => {
-    if (!arrived) {
-      setArrived(true);
+  const params =
+    useLocalSearchParams();
+
+  const requestId =
+    Array.isArray(params.requestId)
+      ? params.requestId[0]
+      : params.requestId;
+
+
+  const [
+    request,
+    setRequest,
+  ] = useState(null);
+
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+
+  const [
+    error,
+    setError,
+  ] = useState('');
+
+
+  const [
+    arrived,
+    setArrived,
+  ] = useState(false);
+
+
+  // =======================================================
+  // LOAD REQUEST
+  // =======================================================
+
+  useEffect(() => {
+
+    let mounted = true;
+
+    async function loadRequest() {
+
+      console.log(
+        '===================================='
+      );
+
+      console.log(
+        '[MECHANIC ACTIVE] Loading request'
+      );
+
+      console.log(
+        '[MECHANIC ACTIVE] Request ID:',
+        requestId
+      );
+
+      if (!requestId) {
+
+        console.error(
+          '[MECHANIC ACTIVE] Missing requestId'
+        );
+
+        if (mounted) {
+
+          setError(
+            'Request ID is missing.'
+          );
+
+          setLoading(false);
+        }
+
+        return;
+      }
+
+
+      try {
+
+        setLoading(true);
+        setError('');
+
+
+        const response =
+          await getMechanicRequestById(
+            requestId
+          );
+
+
+        console.log(
+          '[MECHANIC ACTIVE] API response:',
+          JSON.stringify(
+            response,
+            null,
+            2
+          )
+        );
+
+
+        if (!mounted) {
+          return;
+        }
+
+
+        setRequest(
+          response
+        );
+
+      } catch (err) {
+
+        console.error(
+          '[MECHANIC ACTIVE] Request error:',
+          err
+        );
+
+        if (mounted) {
+
+          setError(
+            err?.message ||
+            'Unable to load request.'
+          );
+        }
+
+      } finally {
+
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+
+    loadRequest();
+
+
+    return () => {
+      mounted = false;
+    };
+
+  }, [
+    requestId,
+  ]);
+
+
+  // =======================================================
+  // CALL DRIVER
+  // =======================================================
+
+  const handleCallDriver = async () => {
+
+    const phone =
+      request?.driver?.phone;
+
+    if (!phone) {
+
+      console.log(
+        '[MECHANIC ACTIVE] Driver phone unavailable'
+      );
+
       return;
     }
 
+
+    try {
+
+      await Linking.openURL(
+        `tel:${phone}`
+      );
+
+    } catch (err) {
+
+      console.error(
+        '[MECHANIC ACTIVE] Unable to call:',
+        err
+      );
+    }
+  };
+
+
+  // =======================================================
+  // NAVIGATE
+  // =======================================================
+
+  const handleNavigate = async () => {
+
+    const latitude =
+      request?.latitude;
+
+    const longitude =
+      request?.longitude;
+
+
+    if (
+      latitude === null ||
+      latitude === undefined ||
+      longitude === null ||
+      longitude === undefined
+    ) {
+
+      return;
+    }
+
+
+    const url =
+      `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`;
+
+
+    try {
+
+      await Linking.openURL(url);
+
+    } catch (err) {
+
+      console.error(
+        '[MECHANIC ACTIVE] Navigation error:',
+        err
+      );
+    }
+  };
+
+
+  // =======================================================
+  // NEXT
+  // =======================================================
+
+  const handleNext = () => {
+
+    if (!arrived) {
+
+      setArrived(true);
+
+      return;
+    }
+
+
     router.push({
       pathname: '/service',
+
       params: {
-        requestId: requestId || 'REQ001',
+        requestId:
+          requestId || '',
       },
     });
   };
 
+
+  // =======================================================
+  // LOADING
+  // =======================================================
+
+  if (loading) {
+
+    return (
+
+      <View
+        style={styles.centerContainer}
+      >
+
+        <ActivityIndicator
+          size="large"
+          color={colors.accent}
+        />
+
+        <Text
+          style={styles.loadingText}
+        >
+          Loading active request...
+        </Text>
+
+      </View>
+    );
+  }
+
+
+  // =======================================================
+  // ERROR
+  // =======================================================
+
+  if (
+    error ||
+    !request
+  ) {
+
+    return (
+
+      <View
+        style={styles.centerContainer}
+      >
+
+        <View
+          style={styles.errorIcon}
+        >
+
+          <Ionicons
+            name="alert-circle-outline"
+            size={34}
+            color={colors.accent}
+          />
+
+        </View>
+
+        <Text
+          style={styles.errorTitle}
+        >
+          Request not found
+        </Text>
+
+        <Text
+          style={styles.errorMessage}
+        >
+          {error ||
+            'Unable to load this service request.'}
+        </Text>
+
+        <TouchableOpacity
+          style={styles.goBackButton}
+          onPress={() => router.back()}
+        >
+
+          <Text
+            style={styles.goBackText}
+          >
+            GO BACK
+          </Text>
+
+        </TouchableOpacity>
+
+      </View>
+    );
+  }
+
+
+  // =======================================================
+  // DATA
+  // =======================================================
+
+  const driver =
+    request.driver || null;
+
+  const vehicle =
+    request.vehicle || null;
+
+
+  const driverName =
+    driver?.name ||
+    'Driver';
+
+
+  const driverPhone =
+    driver?.phone ||
+    '';
+
+
+  const vehicleText =
+    formatVehicle(
+      vehicle
+    );
+
+
+  const serviceName =
+    getServiceName(
+      request.category
+    );
+
+
+  const distanceText =
+    formatDistance(
+      request.distanceKm
+    );
+
+
+  const eta =
+    calculateEta(
+      request.distanceKm
+    );
+
+
+  const location =
+    request.address ||
+    'Driver location';
+
+
+  // =======================================================
+  // UI
+  // =======================================================
+
   return (
-    <View style={styles.container}>
+
+    <View
+      style={styles.container}
+    >
+
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={
+          styles.content
+        }
       >
-        {/* Header */}
-        <View style={styles.header}>
+
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
+        <View
+          style={styles.header}
+        >
+
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
+
             <Ionicons
               name="arrow-back"
               size={20}
               color={colors.text}
             />
+
           </TouchableOpacity>
 
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>Active Request</Text>
-            <Text style={styles.headerSubtitle}>
-              Request #{requestId || 'REQ001'}
+
+          <View
+            style={styles.headerText}
+          >
+
+            <Text
+              style={styles.headerTitle}
+            >
+              Active Request
             </Text>
+
+            <Text
+              style={styles.headerSubtitle}
+            >
+              Request #{request.id}
+            </Text>
+
           </View>
 
-          <View style={styles.activeBadge}>
-            <View style={styles.activeDot} />
-            <Text style={styles.activeBadgeText}>ACTIVE</Text>
+
+          <View
+            style={styles.activeBadge}
+          >
+
+            <View
+              style={styles.activeDot}
+            />
+
+            <Text
+              style={styles.activeBadgeText}
+            >
+              {request.status || 'ACTIVE'}
+            </Text>
+
           </View>
+
         </View>
 
-        {/* Map */}
-        <View style={styles.mapCard}>
-          <View style={styles.mapArea}>
-            <View style={styles.mapRoad1} />
-            <View style={styles.mapRoad2} />
 
-            <View style={styles.locationPin}>
+        {/* =================================================
+            MAP
+        ================================================= */}
+
+        <View
+          style={styles.mapCard}
+        >
+
+          <View
+            style={styles.mapArea}
+          >
+
+            <View
+              style={styles.mapRoad1}
+            />
+
+            <View
+              style={styles.mapRoad2}
+            />
+
+
+            <View
+              style={styles.locationPin}
+            >
+
               <Ionicons
                 name="location"
                 size={26}
                 color={colors.accent}
               />
+
             </View>
 
-            <View style={styles.locationLabel}>
-              <Text style={styles.locationLabelText}>
+
+            <View
+              style={styles.locationLabel}
+            >
+
+              <Text
+                style={
+                  styles.locationLabelText
+                }
+              >
                 Driver location
               </Text>
+
             </View>
+
           </View>
 
-          <View style={styles.locationBottom}>
-            <View style={styles.locationInfo}>
-              <View style={styles.locationIcon}>
+
+          <View
+            style={styles.locationBottom}
+          >
+
+            <View
+              style={styles.locationInfo}
+            >
+
+              <View
+                style={styles.locationIcon}
+              >
+
                 <Ionicons
                   name="navigate-outline"
                   size={18}
                   color={colors.accent}
                 />
+
               </View>
+
 
               <View>
-                <Text style={styles.locationTitle}>
-                  OMR, Chennai
+
+                <Text
+                  style={styles.locationTitle}
+                >
+                  {location}
                 </Text>
-                <Text style={styles.locationSubtitle}>
-                  2.4 km away • Approx. 8 min
+
+                <Text
+                  style={
+                    styles.locationSubtitle
+                  }
+                >
+                  {distanceText}
+
+                  {eta
+                    ? ` • Approx. ${eta} min`
+                    : ''}
                 </Text>
+
               </View>
+
             </View>
 
-            <TouchableOpacity style={styles.navigateButton}>
+
+            <TouchableOpacity
+              style={styles.navigateButton}
+              onPress={
+                handleNavigate
+              }
+            >
+
               <Ionicons
                 name="navigate"
                 size={16}
                 color={colors.white}
               />
-              <Text style={styles.navigateText}>
+
+              <Text
+                style={styles.navigateText}
+              >
                 Navigate
               </Text>
+
             </TouchableOpacity>
+
           </View>
+
         </View>
 
-        {/* Driver */}
-        <Text style={styles.sectionTitle}>Driver details</Text>
 
-        <View style={styles.card}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>RK</Text>
+        {/* =================================================
+            DRIVER
+        ================================================= */}
+
+        <Text
+          style={styles.sectionTitle}
+        >
+          Driver details
+        </Text>
+
+
+        <View
+          style={styles.card}
+        >
+
+          <View
+            style={styles.avatar}
+          >
+
+            <Text
+              style={styles.avatarText}
+            >
+              {getInitials(
+                driverName
+              )}
+            </Text>
+
           </View>
 
-          <View style={styles.driverInfo}>
-            <Text style={styles.driverName}>
-              Rajesh Kumar
+
+          <View
+            style={styles.driverInfo}
+          >
+
+            <Text
+              style={styles.driverName}
+            >
+              {driverName}
             </Text>
-            <Text style={styles.driverVehicle}>
-              Hyundai i20 • TN 38 AB 4521
+
+            <Text
+              style={styles.driverVehicle}
+            >
+              {vehicleText}
             </Text>
+
+            {driverPhone ? (
+
+              <Text
+                style={
+                  styles.driverPhone
+                }
+              >
+                {driverPhone}
+              </Text>
+
+            ) : null}
+
           </View>
 
-          <TouchableOpacity style={styles.callButton}>
+
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={
+              handleCallDriver
+            }
+          >
+
             <Ionicons
               name="call-outline"
               size={19}
               color={colors.success}
             />
+
           </TouchableOpacity>
+
         </View>
 
-        {/* Request */}
-        <Text style={styles.sectionTitle}>Request details</Text>
 
-        <View style={styles.card}>
-          <DetailRow
-            icon="battery-charging-outline"
-            iconColor={colors.serviceBattery}
-            title="Service"
-            value="Battery Issue"
-          />
+        {/* =================================================
+            REQUEST DETAILS
+        ================================================= */}
 
-          <View style={styles.divider} />
+        <Text
+          style={styles.sectionTitle}
+        >
+          Request details
+        </Text>
 
-          <DetailRow
-            icon="cash-outline"
-            iconColor={colors.success}
-            title="Estimated earning"
-            value="₹450"
-          />
 
-          <View style={styles.divider} />
+        <View
+          style={styles.card}
+        >
 
           <DetailRow
-            icon="time-outline"
+            icon="construct-outline"
             iconColor={colors.accent}
-            title="Estimated service time"
-            value="25 mins"
+            title="Service"
+            value={serviceName}
           />
+
+
+          <View
+            style={styles.divider}
+          />
+
+
+          <DetailRow
+            icon="location-outline"
+            iconColor={colors.accent}
+            title="Location"
+            value={location}
+          />
+
+
+          <View
+            style={styles.divider}
+          />
+
+
+          <DetailRow
+            icon="document-text-outline"
+            iconColor={colors.accent}
+            title="Description"
+            value={
+              request.description ||
+              'No additional description'
+            }
+          />
+
         </View>
 
-        {/* Status */}
-        <View style={styles.statusCard}>
+
+        {/* =================================================
+            STATUS
+        ================================================= */}
+
+        <View
+          style={styles.statusCard}
+        >
+
           <View
             style={[
               styles.statusIcon,
-              arrived && styles.statusIconSuccess,
+              arrived &&
+                styles.statusIconSuccess,
             ]}
           >
+
             <Ionicons
               name={
                 arrived
@@ -195,38 +907,67 @@ export default function ActiveScreen() {
                   : colors.accent
               }
             />
+
           </View>
 
-          <View style={styles.statusContent}>
-            <Text style={styles.statusTitle}>
+
+          <View
+            style={styles.statusContent}
+          >
+
+            <Text
+              style={styles.statusTitle}
+            >
               {arrived
                 ? 'You have arrived'
                 : 'On the way'}
             </Text>
 
-            <Text style={styles.statusSubtitle}>
+
+            <Text
+              style={
+                styles.statusSubtitle
+              }
+            >
               {arrived
                 ? 'You can now start the service.'
                 : 'Navigate to the driver location.'}
             </Text>
+
           </View>
+
         </View>
+
       </ScrollView>
 
-      {/* Bottom action */}
-      <View style={styles.bottomBar}>
+
+      {/* ===================================================
+          BOTTOM ACTION
+      =================================================== */}
+
+      <View
+        style={styles.bottomBar}
+      >
+
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={handleNext}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryButtonText}>
+
+          <Text
+            style={styles.primaryButtonText}
+          >
             {arrived
               ? 'START SERVICE'
               : "I'VE ARRIVED"}
           </Text>
 
-          <View style={styles.buttonIcon}>
+
+          <View
+            style={styles.buttonIcon}
+          >
+
             <Ionicons
               name={
                 arrived
@@ -236,12 +977,21 @@ export default function ActiveScreen() {
               size={19}
               color={colors.white}
             />
+
           </View>
+
         </TouchableOpacity>
+
       </View>
+
     </View>
   );
 }
+
+
+// =========================================================
+// DETAIL ROW
+// =========================================================
 
 function DetailRow({
   icon,
@@ -249,378 +999,562 @@ function DetailRow({
   title,
   value,
 }) {
+
   return (
-    <View style={styles.detailRow}>
-      <View style={styles.detailIcon}>
+
+    <View
+      style={styles.detailRow}
+    >
+
+      <View
+        style={styles.detailIcon}
+      >
+
         <Ionicons
           name={icon}
           size={18}
           color={iconColor}
         />
+
       </View>
 
-      <View style={styles.detailText}>
-        <Text style={styles.detailTitle}>
+
+      <View
+        style={styles.detailText}
+      >
+
+        <Text
+          style={styles.detailTitle}
+        >
           {title}
         </Text>
 
-        <Text style={styles.detailValue}>
+
+        <Text
+          style={styles.detailValue}
+        >
           {value}
         </Text>
+
       </View>
+
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
 
-  content: {
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: 18,
-    paddingBottom: 110,
-  },
+// =========================================================
+// STYLES
+// =========================================================
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
+const styles =
+  StyleSheet.create({
 
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    container: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+    },
 
-  headerText: {
-    flex: 1,
-    marginLeft: 11,
-  },
 
-  headerTitle: {
-    fontFamily: 'InterBold',
-    fontSize: 18,
-    color: colors.text,
-  },
+    centerContainer: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 30,
+    },
 
-  headerSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
 
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.accentLight,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: spacing.radiusRound,
-  },
+    loadingText: {
+      marginTop: 12,
+      fontFamily: 'InterMedium',
+      fontSize: 12,
+      color: colors.textMuted,
+    },
 
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.accent,
-    marginRight: 5,
-  },
 
-  activeBadgeText: {
-    fontFamily: 'InterBold',
-    fontSize: 8,
-    color: colors.accent,
-  },
+    errorIcon: {
+      width: 65,
+      height: 65,
+      borderRadius: 20,
+      backgroundColor:
+        colors.accentLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 15,
+    },
 
-  mapCard: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.radiusLarge,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    overflow: 'hidden',
-  },
 
-  mapArea: {
-    height: 190,
-    backgroundColor: colors.mapBackground,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    errorTitle: {
+      fontFamily: 'InterBold',
+      fontSize: 17,
+      color: colors.text,
+    },
 
-  mapRoad1: {
-    position: 'absolute',
-    width: '120%',
-    height: 24,
-    backgroundColor: colors.mapRoad,
-    transform: [{ rotate: '18deg' }],
-  },
 
-  mapRoad2: {
-    position: 'absolute',
-    width: '120%',
-    height: 18,
-    backgroundColor: colors.mapRoad,
-    transform: [{ rotate: '-32deg' }],
-  },
+    errorMessage: {
+      fontFamily: 'InterRegular',
+      fontSize: 11,
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginTop: 8,
+      maxWidth: 320,
+    },
 
-  locationPin: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-  },
 
-  locationLabel: {
-    marginTop: 7,
-    backgroundColor: colors.white,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
+    goBackButton: {
+      marginTop: 22,
+      backgroundColor: colors.accent,
+      paddingHorizontal: 28,
+      paddingVertical: 15,
+      borderRadius: 14,
+    },
 
-  locationLabelText: {
-    fontFamily: 'InterMedium',
-    fontSize: 9,
-    color: colors.textSecondary,
-  },
 
-  locationBottom: {
-    padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+    goBackText: {
+      fontFamily: 'InterBold',
+      fontSize: 10,
+      color: colors.white,
+    },
 
-  locationInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
 
-  locationIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 9,
-  },
+    content: {
+      paddingHorizontal:
+        spacing.screenHorizontal,
+      paddingTop: 18,
+      paddingBottom: 110,
+    },
 
-  locationTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 11,
-    color: colors.text,
-  },
 
-  locationSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 18,
+    },
 
-  navigateButton: {
-    height: 37,
-    borderRadius: 11,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
 
-  navigateText: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 9,
-    color: colors.white,
-  },
+    backButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  sectionTitle: {
-    fontFamily: 'InterBold',
-    fontSize: 15,
-    color: colors.text,
-    marginTop: 20,
-    marginBottom: 10,
-  },
 
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: spacing.radiusLarge,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.cardPadding,
-  },
+    headerText: {
+      flex: 1,
+      marginLeft: 11,
+    },
 
-  avatar: {
-    width: 45,
-    height: 45,
-    borderRadius: 14,
-    backgroundColor: colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
 
-  avatarText: {
-    fontFamily: 'InterBold',
-    fontSize: 12,
-    color: colors.accent,
-  },
+    headerTitle: {
+      fontFamily: 'InterBold',
+      fontSize: 18,
+      color: colors.text,
+    },
 
-  driverInfo: {
-    flex: 1,
-  },
 
-  driverName: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
-    color: colors.text,
-  },
+    headerSubtitle: {
+      fontFamily: 'InterRegular',
+      fontSize: 10,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
 
-  driverVehicle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 3,
-  },
 
-  callButton: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
-    backgroundColor: colors.successLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    activeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor:
+        colors.accentLight,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      borderRadius:
+        spacing.radiusRound,
+    },
 
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
 
-  detailIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
+    activeDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor:
+        colors.accent,
+      marginRight: 5,
+    },
 
-  detailText: {
-    flex: 1,
-  },
 
-  detailTitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textMuted,
-  },
+    activeBadgeText: {
+      fontFamily: 'InterBold',
+      fontSize: 8,
+      color: colors.accent,
+    },
 
-  detailValue: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
-    color: colors.text,
-    marginTop: 2,
-  },
 
-  divider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 12,
-  },
+    mapCard: {
+      backgroundColor:
+        colors.surface,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      overflow: 'hidden',
+    },
 
-  statusCard: {
-    marginTop: 18,
-    backgroundColor: colors.accentLight,
-    borderRadius: spacing.radiusMedium,
-    padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
 
-  statusIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
+    mapArea: {
+      height: 190,
+      backgroundColor:
+        colors.mapBackground,
+      position: 'relative',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  statusIconSuccess: {
-    backgroundColor: colors.successLight,
-  },
 
-  statusContent: {
-    flex: 1,
-  },
+    mapRoad1: {
+      position: 'absolute',
+      width: '120%',
+      height: 24,
+      backgroundColor:
+        colors.mapRoad,
+      transform: [
+        { rotate: '18deg' },
+      ],
+    },
 
-  statusTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 11,
-    color: colors.text,
-  },
 
-  statusSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
+    mapRoad2: {
+      position: 'absolute',
+      width: '120%',
+      height: 18,
+      backgroundColor:
+        colors.mapRoad,
+      transform: [
+        { rotate: '-32deg' },
+      ],
+    },
 
-  bottomBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingVertical: 10,
-  },
 
-  primaryButton: {
-    height: spacing.buttonHeight,
-    borderRadius: 15,
-    backgroundColor: colors.accent,
-    paddingLeft: 18,
-    paddingRight: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+    locationPin: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      backgroundColor:
+        colors.white,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 4,
+    },
 
-  primaryButtonText: {
-    flex: 1,
-    fontFamily: 'InterBold',
-    fontSize: 11,
-    color: colors.white,
-  },
 
-  buttonIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 11,
-    backgroundColor: colors.accentDark,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+    locationLabel: {
+      marginTop: 7,
+      backgroundColor:
+        colors.white,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 8,
+    },
+
+
+    locationLabelText: {
+      fontFamily: 'InterMedium',
+      fontSize: 9,
+      color: colors.textSecondary,
+    },
+
+
+    locationBottom: {
+      padding: 13,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent:
+        'space-between',
+    },
+
+
+    locationInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+
+
+    locationIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
+      backgroundColor:
+        colors.accentLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 9,
+    },
+
+
+    locationTitle: {
+      fontFamily: 'InterSemiBold',
+      fontSize: 11,
+      color: colors.text,
+      maxWidth: 210,
+    },
+
+
+    locationSubtitle: {
+      fontFamily: 'InterRegular',
+      fontSize: 9,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+
+
+    navigateButton: {
+      height: 37,
+      borderRadius: 11,
+      backgroundColor:
+        colors.accent,
+      paddingHorizontal: 11,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+
+
+    navigateText: {
+      fontFamily: 'InterSemiBold',
+      fontSize: 9,
+      color: colors.white,
+    },
+
+
+    sectionTitle: {
+      fontFamily: 'InterBold',
+      fontSize: 15,
+      color: colors.text,
+      marginTop: 20,
+      marginBottom: 10,
+    },
+
+
+    card: {
+      backgroundColor:
+        colors.surface,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding:
+        spacing.cardPadding,
+    },
+
+
+    avatar: {
+      width: 45,
+      height: 45,
+      borderRadius: 14,
+      backgroundColor:
+        colors.accentLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+
+    avatarText: {
+      fontFamily: 'InterBold',
+      fontSize: 12,
+      color: colors.accent,
+    },
+
+
+    driverInfo: {
+      flex: 1,
+    },
+
+
+    driverName: {
+      fontFamily: 'InterSemiBold',
+      fontSize: 12,
+      color: colors.text,
+    },
+
+
+    driverVehicle: {
+      fontFamily: 'InterRegular',
+      fontSize: 9,
+      color: colors.textMuted,
+      marginTop: 3,
+    },
+
+
+    driverPhone: {
+      fontFamily: 'InterMedium',
+      fontSize: 9,
+      color: colors.textSecondary,
+      marginTop: 3,
+    },
+
+
+    callButton: {
+      width: 39,
+      height: 39,
+      borderRadius: 12,
+      backgroundColor:
+        colors.successLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+
+    detailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+
+    detailIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 11,
+      backgroundColor:
+        colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+
+    detailText: {
+      flex: 1,
+    },
+
+
+    detailTitle: {
+      fontFamily: 'InterRegular',
+      fontSize: 9,
+      color: colors.textMuted,
+    },
+
+
+    detailValue: {
+      fontFamily: 'InterSemiBold',
+      fontSize: 12,
+      color: colors.text,
+      marginTop: 2,
+    },
+
+
+    divider: {
+      height: 1,
+      backgroundColor:
+        colors.borderLight,
+      marginVertical: 12,
+    },
+
+
+    statusCard: {
+      marginTop: 18,
+      backgroundColor:
+        colors.accentLight,
+      borderRadius:
+        spacing.radiusMedium,
+      padding: 13,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+
+    statusIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor:
+        colors.white,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+
+
+    statusIconSuccess: {
+      backgroundColor:
+        colors.successLight,
+    },
+
+
+    statusContent: {
+      flex: 1,
+    },
+
+
+    statusTitle: {
+      fontFamily: 'InterSemiBold',
+      fontSize: 11,
+      color: colors.text,
+    },
+
+
+    statusSubtitle: {
+      fontFamily: 'InterRegular',
+      fontSize: 9,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+
+
+    bottomBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor:
+        colors.surface,
+      borderTopWidth: 1,
+      borderTopColor:
+        colors.borderLight,
+      paddingHorizontal:
+        spacing.screenHorizontal,
+      paddingVertical: 10,
+    },
+
+
+    primaryButton: {
+      height:
+        spacing.buttonHeight,
+      borderRadius: 15,
+      backgroundColor:
+        colors.accent,
+      paddingLeft: 18,
+      paddingRight: 7,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+
+    primaryButtonText: {
+      flex: 1,
+      fontFamily: 'InterBold',
+      fontSize: 11,
+      color: colors.white,
+    },
+
+
+    buttonIcon: {
+      width: 39,
+      height: 39,
+      borderRadius: 11,
+      backgroundColor:
+        colors.accentDark,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });

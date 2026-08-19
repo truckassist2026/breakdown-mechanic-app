@@ -17,8 +17,15 @@ import { useRouter } from 'expo-router';
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
-const API_BASE_URL = 'http://192.168.1.15:8080';
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL||
+  'https://truck-assist-backend.onrender.com';
 
+if (!API_BASE_URL) {
+  throw new Error(
+    'EXPO_PUBLIC_API_URL is not configured.'
+  );
+}
 async function sendMechanicOtp(phone) {
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/mechanic/send-otp`, {
     method: 'POST',

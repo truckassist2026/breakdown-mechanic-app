@@ -1,584 +1,1440 @@
 import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-
-import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
 import {
-  Ionicons,
-} from '@expo/vector-icons';
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import {
-  useRouter,
-} from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
-import {
-  useAuth,
-} from '../context/AuthContext';
+import BottomNavigation from '../components/BottomNavigation';
 
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
+import {
+  getMechanicRequests,
+  getMyMechanicProfile,
+  updateMechanicAvailability,
+  updateMechanicLocation,
+} from '../services/mechanicApi';
 
-// =========================================================
-// HELPERS
-// =========================================================
+import {
+  getCurrentMechanicLocation,
+  requestMechanicLocationPermission,
+} from '../utils/mechanicLocation';
 
-function getGreeting() {
-  const hour = new Date().getHours();
+import * as Location from 'expo-location';
 
-  if (hour < 12) {
-    return 'Good morning';
-  }
-
-  if (hour < 17) {
-    return 'Good afternoon';
-  }
-
-  return 'Good evening';
-}
-
-
-function getDisplayName(user) {
-  if (!user) {
-    return 'Mechanic';
-  }
-
-  return (
-    user.name ||
-    user.fullName ||
-    user.mechanicName ||
-    user.workshopName ||
-    'Mechanic'
-  );
-}
-
-
-// =========================================================
-// DASHBOARD
-// =========================================================
-
-export default function IndexScreen() {
+export default function MechanicHome() {
   const router = useRouter();
 
-  const {
-    loading,
-    user,
-    isAuthenticated,
-    logout,
-  } = useAuth();
+  // =======================================================
+  // STATE
+  // =======================================================
 
-  const [refreshing, setRefreshing] = useState(false);
+  const [
+    isOnline,
+    setIsOnline,
+  ] = useState(false);
+
+  const [
+    mechanic,
+    setMechanic,
+  ] = useState(null);
+
+  const [
+    requests,
+    setRequests,
+  ] = useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    availabilityLoading,
+    setAvailabilityLoading,
+  ] = useState(false);
+
+  const [
+    locationLoading,
+    setLocationLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState(null);
+
+  const locationWatcher =
+    useRef(null);
+
+  const mountedRef =
+    useRef(true);
 
   // =======================================================
-  // AUTH PROTECTION
+  // CLEANUP
   // =======================================================
 
   useEffect(() => {
-    if (loading) {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+
+      stopLocationTracking();
+    };
+  }, []);
+
+  // =======================================================
+  // LOAD PROFILE
+  // =======================================================
+
+  const loadProfile =
+    useCallback(
+      async () => {
+        try {
+          setLoading(true);
+          setError(null);
+
+          console.log(
+            '[Mechanic Home] Loading profile...'
+          );
+
+          const response =
+            await getMyMechanicProfile();
+
+          console.log(
+            '[Mechanic Home] Profile:',
+            response
+          );
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          setMechanic(
+            response
+          );
+
+          setIsOnline(
+            Boolean(
+              response?.available
+            )
+          );
+        } catch (err) {
+          console.error(
+            '[Mechanic Home] Profile error:',
+            err
+          );
+
+          if (
+            mountedRef.current
+          ) {
+            setError(
+              err?.message ||
+                'Unable to load mechanic profile.'
+            );
+          }
+        } finally {
+          if (
+            mountedRef.current
+          ) {
+            setLoading(false);
+          }
+        }
+      },
+      []
+    );
+
+  // =======================================================
+  // LOAD REQUESTS
+  // =======================================================
+
+  const loadRequests =
+    useCallback(
+      async () => {
+        try {
+          const response =
+            await getMechanicRequests();
+
+          console.log(
+            '[Mechanic Home] Requests:',
+            response
+          );
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          const list =
+            Array.isArray(response)
+              ? response
+              : Array.isArray(
+                  response?.data
+                )
+                ? response.data
+                : Array.isArray(
+                    response?.content
+                  )
+                  ? response.content
+                  : [];
+
+          setRequests(
+            list
+          );
+        } catch (err) {
+          console.error(
+            '[Mechanic Home] Request loading error:',
+            err
+          );
+
+          if (
+            mountedRef.current
+          ) {
+            setRequests([]);
+          }
+        }
+      },
+      []
+    );
+
+  // =======================================================
+  // START LOCATION TRACKING
+  // =======================================================
+
+  const startLocationTracking =
+    useCallback(
+      async () => {
+        try {
+          console.log(
+            '[Mechanic Location] Starting location tracking...'
+          );
+
+          // -------------------------------------------------
+          // Permission
+          // -------------------------------------------------
+
+          await requestMechanicLocationPermission();
+
+          // -------------------------------------------------
+          // Current location
+          // -------------------------------------------------
+
+          const current =
+            await getCurrentMechanicLocation();
+
+          console.log(
+            '[Mechanic Location] Initial location:',
+            current
+          );
+
+          // -------------------------------------------------
+          // Send initial location
+          // -------------------------------------------------
+
+          await updateMechanicLocation(
+            current.latitude,
+            current.longitude
+          );
+
+          // -------------------------------------------------
+          // Stop existing watcher
+          // -------------------------------------------------
+
+          if (
+            locationWatcher.current
+          ) {
+            locationWatcher.current.remove();
+
+            locationWatcher.current =
+              null;
+          }
+
+          // -------------------------------------------------
+          // Start GPS watcher
+          // -------------------------------------------------
+
+          locationWatcher.current =
+            await Location.watchPositionAsync(
+              {
+                accuracy:
+                  Location.Accuracy.High,
+
+                timeInterval:
+                  30000,
+
+                distanceInterval:
+                  100,
+              },
+
+              async (
+                location
+              ) => {
+                try {
+                  const latitude =
+                    location?.coords?.latitude;
+
+                  const longitude =
+                    location?.coords?.longitude;
+
+                  if (
+                    latitude === undefined ||
+                    latitude === null ||
+                    longitude === undefined ||
+                    longitude === null
+                  ) {
+                    return;
+                  }
+
+                  console.log(
+                    '[Mechanic Location] GPS update:',
+                    {
+                      latitude,
+                      longitude,
+                    }
+                  );
+
+                  await updateMechanicLocation(
+                    latitude,
+                    longitude
+                  );
+
+                  if (
+                    mountedRef.current
+                  ) {
+                    setMechanic(
+                      previous => ({
+                        ...previous,
+                        latitude,
+                        longitude,
+                        lastLocationAt:
+                          new Date().toISOString(),
+                      })
+                    );
+                  }
+                } catch (err) {
+                  console.error(
+                    '[Mechanic Location] Update failed:',
+                    err
+                  );
+                }
+              }
+            );
+
+          console.log(
+            '[Mechanic Location] Location tracking started.'
+          );
+
+        } catch (err) {
+          console.error(
+            '[Mechanic Location] Unable to start:',
+            err
+          );
+
+          throw err;
+        }
+      },
+      []
+    );
+
+  // =======================================================
+  // STOP LOCATION TRACKING
+  // =======================================================
+
+  const stopLocationTracking =
+    useCallback(
+      () => {
+        if (
+          locationWatcher.current
+        ) {
+          console.log(
+            '[Mechanic Location] Stopping location tracking...'
+          );
+
+          locationWatcher.current.remove();
+
+          locationWatcher.current =
+            null;
+        }
+      },
+      []
+    );
+
+  // =======================================================
+  // GO ONLINE
+  // =======================================================
+
+  const goOnline =
+    useCallback(
+      async () => {
+        if (
+          availabilityLoading
+        ) {
+          return;
+        }
+
+        try {
+          setAvailabilityLoading(
+            true
+          );
+
+          setError(null);
+
+          console.log(
+            '[Mechanic Availability] Going online...'
+          );
+
+          // -------------------------------------------------
+          // 1. Get GPS permission
+          // -------------------------------------------------
+
+          await requestMechanicLocationPermission();
+
+          // -------------------------------------------------
+          // 2. Get current location
+          // -------------------------------------------------
+
+          const location =
+            await getCurrentMechanicLocation();
+
+          // -------------------------------------------------
+          // 3. Save location FIRST
+          //
+          // Backend requires location before availability=true
+          // -------------------------------------------------
+
+          const locationResponse =
+            await updateMechanicLocation(
+              location.latitude,
+              location.longitude
+            );
+
+          console.log(
+            '[Mechanic Availability] Location saved:',
+            locationResponse
+          );
+
+          // -------------------------------------------------
+          // 4. Mark mechanic available
+          // -------------------------------------------------
+
+          const availabilityResponse =
+            await updateMechanicAvailability(
+              true
+            );
+
+          console.log(
+            '[Mechanic Availability] Online:',
+            availabilityResponse
+          );
+
+          if (
+            !mountedRef.current
+          ) {
+            return;
+          }
+
+          setMechanic(
+            availabilityResponse
+          );
+
+          setIsOnline(true);
+
+          // -------------------------------------------------
+          // 5. Start continuous tracking
+          // -------------------------------------------------
+
+          await startLocationTracking();
+
+          // -------------------------------------------------
+          // 6. Load available requests
+          // -------------------------------------------------
+
+          await loadRequests();
+
+        } catch (err) {
+          console.error(
+            '[Mechanic Availability] Go online failed:',
+            err
+          );
+
+          stopLocationTracking();
+
+          if (
+            mountedRef.current
+          ) {
+            setIsOnline(false);
+
+            setError(
+              err?.message ||
+                'Unable to go online. Please enable location permission and try again.'
+            );
+
+            Alert.alert(
+              'Unable to Go Online',
+              err?.message ||
+                'Please enable location permission and try again.'
+            );
+          }
+        } finally {
+          if (
+            mountedRef.current
+          ) {
+            setAvailabilityLoading(
+              false
+            );
+          }
+        }
+      },
+      [
+        availabilityLoading,
+        loadRequests,
+        startLocationTracking,
+        stopLocationTracking,
+      ]
+    );
+
+  // =======================================================
+  // GO OFFLINE
+  // =======================================================
+
+  const goOffline =
+    useCallback(
+      async () => {
+        if (
+          availabilityLoading
+        ) {
+          return;
+        }
+
+        try {
+          setAvailabilityLoading(
+            true
+          );
+
+          console.log(
+            '[Mechanic Availability] Going offline...'
+          );
+
+          // -------------------------------------------------
+          // Stop GPS first
+          // -------------------------------------------------
+
+          stopLocationTracking();
+
+          // -------------------------------------------------
+          // Update backend
+          // -------------------------------------------------
+
+          const response =
+            await updateMechanicAvailability(
+              false
+            );
+
+          console.log(
+            '[Mechanic Availability] Offline:',
+            response
+          );
+
+          if (
+            !mountedRef.current
+          ) {
+            return;
+          }
+
+          setMechanic(
+            response
+          );
+
+          setIsOnline(false);
+
+          setRequests([]);
+
+        } catch (err) {
+          console.error(
+            '[Mechanic Availability] Go offline failed:',
+            err
+          );
+
+          if (
+            mountedRef.current
+          ) {
+            Alert.alert(
+              'Unable to Go Offline',
+              err?.message ||
+                'Unable to update your availability.'
+            );
+          }
+        } finally {
+          if (
+            mountedRef.current
+          ) {
+            setAvailabilityLoading(
+              false
+            );
+          }
+        }
+      },
+      [
+        availabilityLoading,
+        stopLocationTracking,
+      ]
+    );
+
+  // =======================================================
+  // TOGGLE ONLINE / OFFLINE
+  // =======================================================
+
+  const handleAvailability =
+    useCallback(
+      async () => {
+        if (isOnline) {
+          await goOffline();
+        } else {
+          await goOnline();
+        }
+      },
+      [
+        isOnline,
+        goOffline,
+        goOnline,
+      ]
+    );
+
+  // =======================================================
+  // INITIAL LOAD
+  // =======================================================
+
+  useEffect(() => {
+    loadProfile();
+  }, [
+    loadProfile,
+  ]);
+
+  // =======================================================
+  // START TRACKING IF PROFILE IS ALREADY ONLINE
+  // =======================================================
+
+  useEffect(() => {
+    if (
+      loading ||
+      !mechanic
+    ) {
       return;
     }
 
-    if (!isAuthenticated) {
-      router.replace('/login');
+    if (
+      mechanic.available
+    ) {
+      startLocationTracking()
+        .then(() => {
+          loadRequests();
+        })
+        .catch(
+          error => {
+            console.error(
+              '[Mechanic Location] Existing online session failed:',
+              error
+            );
+          }
+        );
+    } else {
+      stopLocationTracking();
     }
+
+    return () => {
+      stopLocationTracking();
+    };
   }, [
     loading,
-    isAuthenticated,
+    mechanic?.id,
   ]);
 
-
   // =======================================================
-  // REFRESH
-  // =======================================================
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-
-    // Backend dashboard APIs will be connected here.
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 600);
-  };
-
-
-  // =======================================================
-  // LOGOUT
+  // REQUEST POLLING
   // =======================================================
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
+  useEffect(() => {
+    if (
+      !isOnline
+    ) {
+      return;
+    }
 
+    loadRequests();
+
+    const timer =
+      setInterval(
+        () => {
+          loadRequests();
+        },
+        15000
+      );
+
+    return () => {
+      clearInterval(
+        timer
+      );
+    };
+  }, [
+    isOnline,
+    loadRequests,
+  ]);
+
+  // =======================================================
+  // OPEN REQUEST
+  // =======================================================
+
+  const openRequest =
+    request => {
+      router.push({
+        pathname:
+          '/request-details',
+
+        params: {
+          requestId:
+            request.id,
+        },
+      });
+    };
 
   // =======================================================
   // LOADING
   // =======================================================
 
-  if (loading || !isAuthenticated) {
+  if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View
+        style={
+          styles.loadingContainer
+        }
+      >
         <ActivityIndicator
-          size="small"
-          color={colors.accent}
+          size="large"
+          color={
+            colors.accent
+          }
         />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Loading your profile...
+        </Text>
       </View>
     );
   }
 
-
-  const greeting = getGreeting();
-  const displayName = getDisplayName(user);
-
+  // =======================================================
+  // RENDER
+  // =======================================================
 
   return (
-    <View style={styles.container}>
+    <View
+      style={
+        styles.container
+      }
+    >
+      <ScrollView
+        showsVerticalScrollIndicator={
+          false
+        }
+        contentContainerStyle={
+          styles.content
+        }
+      >
+        {/* ================================================= */}
+        {/* HEADER */}
+        {/* ================================================= */}
 
-      {/* =================================================
-          HEADER
-          ================================================= */}
+        <View
+          style={
+            styles.header
+          }
+        >
+          <View
+            style={
+              styles.brandRow
+            }
+          >
+            <View
+              style={
+                styles.logoBox
+              }
+            >
+              <Ionicons
+                name="construct-outline"
+                size={23}
+                color={
+                  colors.white
+                }
+              />
+            </View>
 
-      <View style={styles.header}>
+            <View>
+              <Text
+                style={
+                  styles.brandName
+                }
+              >
+                Truck Assist
+              </Text>
 
-        <View style={styles.headerLeft}>
+              <Text
+                style={
+                  styles.brandSubtitle
+                }
+              >
+                Mechanic Partner
+              </Text>
+            </View>
+          </View>
 
-          <View style={styles.brandIcon}>
+          <TouchableOpacity
+            style={
+              styles.notificationButton
+            }
+            activeOpacity={
+              0.8
+            }
+          >
             <Ionicons
-              name="construct"
-              size={20}
-              color={colors.white}
+              name="notifications-outline"
+              size={21}
+              color={
+                colors.text
+              }
+            />
+
+            <View
+              style={
+                styles.notificationDot
+              }
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* ================================================= */}
+        {/* WELCOME */}
+        {/* ================================================= */}
+
+        <View
+          style={
+            styles.welcomeSection
+          }
+        >
+          <Text
+            style={
+              styles.welcomeSmall
+            }
+          >
+            Good morning
+          </Text>
+
+          <Text
+            style={
+              styles.welcomeTitle
+            }
+          >
+            Ready to help drivers?
+          </Text>
+
+          <Text
+            style={
+              styles.welcomeDescription
+            }
+          >
+            Accept nearby service requests and help
+            drivers get back on the road.
+          </Text>
+        </View>
+
+        {/* ================================================= */}
+        {/* AVAILABILITY */}
+        {/* ================================================= */}
+
+        <View
+          style={
+            styles.availabilityCard
+          }
+        >
+          <View
+            style={[
+              styles.availabilityIcon,
+              !isOnline &&
+                styles.offlineIcon,
+            ]}
+          >
+            <Ionicons
+              name={
+                isOnline
+                  ? 'radio-outline'
+                  : 'pause-outline'
+              }
+              size={22}
+              color={
+                isOnline
+                  ? colors.success
+                  : colors.textMuted
+              }
             />
           </View>
 
-          <View>
-            <Text style={styles.brandName}>
-              Truck Assist
-            </Text>
-
-            <Text style={styles.brandSubtitle}>
-              Mechanic Partner
-            </Text>
-          </View>
-
-        </View>
-
-
-        <Pressable
-          style={styles.profileButton}
-          onPress={() => router.push('/profile')}
-        >
-          <Ionicons
-            name="person-outline"
-            size={20}
-            color={colors.text}
-          />
-        </Pressable>
-
-      </View>
-
-
-      {/* =================================================
-          CONTENT
-          ================================================= */}
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.accent}
-          />
-        }
-      >
-
-        {/* ===============================================
-            WELCOME
-            =============================================== */}
-
-        <View style={styles.welcomeSection}>
-
-          <View style={styles.welcomeTextContainer}>
-
-            <Text style={styles.greeting}>
-              {greeting}
+          <View
+            style={
+              styles.availabilityContent
+            }
+          >
+            <Text
+              style={
+                styles.availabilityTitle
+              }
+            >
+              {isOnline
+                ? 'You are online'
+                : 'You are offline'}
             </Text>
 
             <Text
-              style={styles.name}
-              numberOfLines={1}
+              style={
+                styles.availabilitySubtitle
+              }
             >
-              {displayName}
+              {isOnline
+                ? 'Your live location is being shared for service matching'
+                : 'Go online to share your location and receive requests'}
             </Text>
-
-            <Text style={styles.welcomeDescription}>
-              Ready to help drivers get back on the road?
-            </Text>
-
           </View>
 
-
-          <View style={styles.statusBadge}>
-
-            <View style={styles.statusDot} />
-
-            <Text style={styles.statusText}>
-              Available
-            </Text>
-
-          </View>
-
-        </View>
-
-
-        {/* ===============================================
-            TODAY
-            =============================================== */}
-
-        <View style={styles.sectionHeader}>
-
-          <View>
-            <Text style={styles.sectionTitle}>
-              Today's Overview
-            </Text>
-
-            <Text style={styles.sectionSubtitle}>
-              {new Date().toLocaleDateString(
-                'en-IN',
-                {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'short',
+          <TouchableOpacity
+            style={[
+              styles.toggle,
+              isOnline &&
+                styles.toggleActive,
+            ]}
+            onPress={
+              handleAvailability
+            }
+            disabled={
+              availabilityLoading
+            }
+            activeOpacity={
+              0.8
+            }
+          >
+            {availabilityLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={
+                  colors.white
                 }
-              )}
-            </Text>
-          </View>
-
+              />
+            ) : (
+              <View
+                style={[
+                  styles.toggleCircle,
+                  isOnline &&
+                    styles.toggleCircleActive,
+                ]}
+              />
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* ================================================= */}
+        {/* LOCATION STATUS */}
+        {/* ================================================= */}
 
-        {/* ===============================================
-            KPI GRID
-            =============================================== */}
-
-        <View style={styles.kpiGrid}>
-
-          <DashboardCard
-            icon="notifications-outline"
-            title="New Requests"
-            value="0"
-            subtitle="Waiting for you"
-            iconBackground={colors.accentLight}
-            iconColor={colors.accent}
-            onPress={() => router.push('/requests')}
-          />
-
-          <DashboardCard
-            icon="construct-outline"
-            title="Active Jobs"
-            value="0"
-            subtitle="Currently servicing"
-            iconBackground={colors.warningLight}
-            iconColor={colors.warning}
-            onPress={() => router.push('/active')}
-          />
-
-          <DashboardCard
-            icon="checkmark-circle-outline"
-            title="Completed"
-            value="0"
-            subtitle="Today's jobs"
-            iconBackground={colors.successLight}
-            iconColor={colors.success}
-            onPress={() => router.push('/history')}
-          />
-
-          <DashboardCard
-            icon="wallet-outline"
-            title="Earnings"
-            value="₹0"
-            subtitle="Today's earnings"
-            iconBackground={colors.infoLight}
-            iconColor={colors.info}
-            onPress={() => router.push('/earnings')}
-          />
-
-        </View>
-
-
-        {/* ===============================================
-            ACTIVE SERVICE
-            =============================================== */}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Active Service
-          </Text>
-        </View>
-
-
-        <Pressable
-          style={styles.emptyCard}
-          onPress={() => router.push('/active')}
-        >
-
-          <View style={styles.emptyIcon}>
+        {isOnline && (
+          <View
+            style={
+              styles.locationStatus
+            }
+          >
             <Ionicons
-              name="car-outline"
-              size={26}
-              color={colors.textMuted}
+              name="location"
+              size={15}
+              color={
+                colors.success
+              }
+            />
+
+            <Text
+              style={
+                styles.locationStatusText
+              }
+            >
+              Live location active
+            </Text>
+
+            <View
+              style={
+                styles.locationDot
+              }
             />
           </View>
+        )}
 
+        {/* ================================================= */}
+        {/* REQUEST HEADER */}
+        {/* ================================================= */}
 
-          <View style={styles.emptyContent}>
-
-            <Text style={styles.emptyTitle}>
-              No active service
+        <View
+          style={
+            styles.sectionHeader
+          }
+        >
+          <View>
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              New requests
             </Text>
 
-            <Text style={styles.emptyDescription}>
-              Accepted service requests will appear here.
+            <Text
+              style={
+                styles.sectionSubtitle
+              }
+            >
+              Nearby drivers need your help
             </Text>
-
           </View>
 
-
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={colors.textLight}
-          />
-
-        </Pressable>
-
-
-        {/* ===============================================
-            QUICK ACTIONS
-            =============================================== */}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Quick Actions
-          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              router.push(
+                '/requests'
+              )
+            }
+            activeOpacity={
+              0.7
+            }
+          >
+            <Text
+              style={
+                styles.viewAll
+              }
+            >
+              View all
+            </Text>
+          </TouchableOpacity>
         </View>
 
+        {/* ================================================= */}
+        {/* REQUESTS */}
+        {/* ================================================= */}
 
-        <View style={styles.quickActions}>
+        {!isOnline ? (
+          <View
+            style={
+              styles.offlineCard
+            }
+          >
+            <View
+              style={
+                styles.offlineCardIcon
+              }
+            >
+              <Ionicons
+                name="moon-outline"
+                size={24}
+                color={
+                  colors.textMuted
+                }
+              />
+            </View>
 
-          <QuickAction
-            icon="list-outline"
-            title="Requests"
-            subtitle="View requests"
-            onPress={() => router.push('/requests')}
-          />
+            <Text
+              style={
+                styles.offlineTitle
+              }
+            >
+              You're currently offline
+            </Text>
 
+            <Text
+              style={
+                styles.offlineText
+              }
+            >
+              Go online to share your live location
+              and receive nearby service requests.
+            </Text>
+
+            <TouchableOpacity
+              style={
+                styles.goOnlineButton
+              }
+              onPress={
+                goOnline
+              }
+              activeOpacity={
+                0.85
+            }
+            >
+              <Text
+                style={
+                  styles.goOnlineText
+                }
+              >
+                GO ONLINE
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : requests.length === 0 ? (
+          <View
+            style={
+              styles.emptyCard
+            }
+          >
+            <View
+              style={
+                styles.emptyIcon
+              }
+            >
+              <Ionicons
+                name="search-outline"
+                size={25}
+                color={
+                  colors.accent
+                }
+              />
+            </View>
+
+            <Text
+              style={
+                styles.emptyTitle
+              }
+            >
+              Looking for requests
+            </Text>
+
+            <Text
+              style={
+                styles.emptyText
+              }
+            >
+              We'll show nearby driver requests here
+              when they become available.
+            </Text>
+          </View>
+        ) : (
+          requests.map(
+            request => (
+              <RequestCard
+                key={
+                  request.id
+                }
+                request={
+                  request
+                }
+                onPress={() =>
+                  openRequest(
+                    request
+                  )
+                }
+              />
+            )
+          )
+        )}
+
+        {/* ================================================= */}
+        {/* QUICK ACTIONS */}
+        {/* ================================================= */}
+
+        <Text
+          style={
+            styles.sectionTitle
+          }
+        >
+          Quick actions
+        </Text>
+
+        <View
+          style={
+            styles.quickRow
+          }
+        >
           <QuickAction
             icon="time-outline"
-            title="History"
-            subtitle="Past services"
-            onPress={() => router.push('/history')}
+            title="Job history"
+            onPress={() =>
+              router.push(
+                '/history'
+              )
+            }
           />
 
           <QuickAction
             icon="wallet-outline"
-            title="Earnings"
-            subtitle="View earnings"
-            onPress={() => router.push('/earnings')}
+            title="My earnings"
+            onPress={() =>
+              router.push(
+                '/earnings'
+              )
+            }
           />
 
           <QuickAction
             icon="person-outline"
             title="Profile"
-            subtitle="Workshop profile"
-            onPress={() => router.push('/profile')}
+            onPress={() =>
+              router.push(
+                '/profile'
+              )
+            }
           />
-
         </View>
 
-
-        {/* ===============================================
-            PARTNER CARD
-            =============================================== */}
-
-        <View style={styles.partnerCard}>
-
-          <View style={styles.partnerIcon}>
-            <Ionicons
-              name="shield-checkmark"
-              size={22}
-              color={colors.accent}
-            />
-          </View>
-
-
-          <View style={styles.partnerContent}>
-
-            <Text style={styles.partnerTitle}>
-              Truck Assist Partner
-            </Text>
-
-            <Text style={styles.partnerText}>
-              Provide reliable roadside assistance and keep
-              drivers moving.
-            </Text>
-
-          </View>
-
-        </View>
-
-
-        {/* ===============================================
-            LOGOUT
-            =============================================== */}
-
-        <Pressable
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-
-          <Ionicons
-            name="log-out-outline"
-            size={19}
-            color={colors.danger}
-          />
-
-          <Text style={styles.logoutText}>
-            Logout
+        {error && (
+          <Text
+            style={
+              styles.errorText
+            }
+          >
+            {error}
           </Text>
-
-        </Pressable>
-
-
-        <Text style={styles.version}>
-          Truck Assist • Mechanic Partner
-        </Text>
-
+        )}
       </ScrollView>
 
+      {/* ================================================= */}
+      {/* BOTTOM NAVIGATION */}
+      {/* ================================================= */}
 
-      {/* =================================================
-          BOTTOM NAVIGATION
-          ================================================= */}
-
-      <View style={styles.bottomNavigation}>
-
-        <BottomNavItem
-          icon="home"
-          outlineIcon="home-outline"
-          label="Home"
-          active
-          onPress={() => router.replace('/')}
-        />
-
-        <BottomNavItem
-          icon="list"
-          outlineIcon="list-outline"
-          label="Requests"
-          onPress={() => router.push('/requests')}
-        />
-
-        <BottomNavItem
-          icon="construct"
-          outlineIcon="construct-outline"
-          label="Active"
-          onPress={() => router.push('/active')}
-        />
-
-        <BottomNavItem
-          icon="wallet"
-          outlineIcon="wallet-outline"
-          label="Earnings"
-          onPress={() => router.push('/earnings')}
-        />
-
-        <BottomNavItem
-          icon="person"
-          outlineIcon="person-outline"
-          label="Profile"
-          onPress={() => router.push('/profile')}
-        />
-
-      </View>
-
+      <BottomNavigation />
     </View>
   );
 }
 
-
 // =========================================================
-// DASHBOARD CARD
+// REQUEST CARD
 // =========================================================
 
-function DashboardCard({
-  icon,
-  title,
-  value,
-  subtitle,
-  iconBackground,
-  iconColor,
+function RequestCard({
+  request,
   onPress,
 }) {
+  const category =
+    String(
+      request?.category ||
+        'OTHER'
+    ).toUpperCase();
+
+  const categoryTitle =
+    category === 'TYRE'
+      ? 'Tyre'
+      : category ===
+          'BATTERY'
+        ? 'Battery'
+        : category ===
+            'FUEL'
+          ? 'Fuel'
+          : category ===
+              'ELECTRICAL'
+            ? 'Electrical'
+            : category ===
+                'BREAKDOWN'
+              ? 'Engine'
+              : 'Other';
+
+  const icon =
+    category === 'BATTERY'
+      ? 'battery-half-outline'
+      : category === 'TYRE'
+        ? 'ellipse-outline'
+        : category === 'FUEL'
+          ? 'flame-outline'
+          : category ===
+              'ELECTRICAL'
+            ? 'flash-outline'
+            : 'construct-outline';
+
   return (
-    <Pressable
-      style={styles.kpiCard}
-      onPress={onPress}
+    <TouchableOpacity
+      style={
+        styles.requestCard
+      }
+      onPress={
+        onPress
+      }
+      activeOpacity={
+        0.9
+      }
     >
-
-      <View style={styles.kpiTop}>
-
+      <View
+        style={
+          styles.requestTop
+        }
+      >
         <View
-          style={[
-            styles.kpiIcon,
-            {
-              backgroundColor: iconBackground,
-            },
-          ]}
+          style={
+            styles.requestIcon
+          }
         >
           <Ionicons
-            name={icon}
-            size={19}
-            color={iconColor}
+            name={
+              icon
+            }
+            size={22}
+            color={
+              colors.accent
+            }
           />
         </View>
 
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={colors.textLight}
-        />
+        <View
+          style={
+            styles.requestInfo
+          }
+        >
+          <Text
+            style={
+              styles.requestTitle
+            }
+          >
+            {categoryTitle} Issue
+          </Text>
 
+          <Text
+            style={
+              styles.requestDescription
+            }
+          >
+            {request?.description ||
+              'Driver requires roadside assistance'}
+          </Text>
+        </View>
+
+        <View
+          style={
+            styles.newBadge
+          }
+        >
+          <Text
+            style={
+              styles.newBadgeText
+            }
+          >
+            NEW
+          </Text>
+        </View>
       </View>
 
+      <View
+        style={
+          styles.requestDivider
+        }
+      />
 
-      <Text style={styles.kpiTitle}>
-        {title}
-      </Text>
+      <View
+        style={
+          styles.requestDetail
+        }
+      >
+        <Ionicons
+          name="location-outline"
+          size={15}
+          color={
+            colors.textMuted
+          }
+        />
 
-      <Text style={styles.kpiValue}>
-        {value}
-      </Text>
+        <Text
+          style={
+            styles.requestDetailText
+          }
+        >
+          {request?.address ||
+            'Driver location'}
+        </Text>
 
-      <Text style={styles.kpiSubtitle}>
-        {subtitle}
-      </Text>
+        {request?.distanceKm !==
+          undefined && (
+          <Text
+            style={
+              styles.distance
+            }
+          >
+            {Number(
+              request.distanceKm
+            ).toFixed(1)}{' '}
+            km
+          </Text>
+        )}
+      </View>
 
-    </Pressable>
+      <View
+        style={
+          styles.requestBottom
+        }
+      >
+        <View>
+          <Text
+            style={
+              styles.earningLabel
+            }
+          >
+            Service request
+          </Text>
+
+          <Text
+            style={
+              styles.earningValue
+            }
+          >
+            {categoryTitle}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={
+            styles.acceptButton
+          }
+          onPress={
+            onPress
+          }
+          activeOpacity={
+            0.85
+          }
+        >
+          <Text
+            style={
+              styles.acceptText
+            }
+          >
+            VIEW REQUEST
+          </Text>
+
+          <Ionicons
+            name="arrow-forward"
+            size={15}
+            color={
+              colors.white
+            }
+          />
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
   );
 }
-
 
 // =========================================================
 // QUICK ACTION
@@ -587,786 +1443,669 @@ function DashboardCard({
 function QuickAction({
   icon,
   title,
-  subtitle,
   onPress,
 }) {
   return (
-    <Pressable
-      style={styles.quickAction}
-      onPress={onPress}
+    <TouchableOpacity
+      style={
+        styles.quickAction
+      }
+      onPress={
+        onPress
+      }
+      activeOpacity={
+        0.8
+      }
     >
-
-      <View style={styles.quickIcon}>
-        <Ionicons
-          name={icon}
-          size={20}
-          color={colors.accent}
-        />
-      </View>
-
-
-      <View style={styles.quickContent}>
-
-        <Text style={styles.quickTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.quickSubtitle}>
-          {subtitle}
-        </Text>
-
-      </View>
-
-
-      <Ionicons
-        name="chevron-forward"
-        size={17}
-        color={colors.textLight}
-      />
-
-    </Pressable>
-  );
-}
-
-
-// =========================================================
-// BOTTOM NAV ITEM
-// =========================================================
-
-function BottomNavItem({
-  icon,
-  outlineIcon,
-  label,
-  active,
-  onPress,
-}) {
-  return (
-    <Pressable
-      style={styles.bottomNavItem}
-      onPress={onPress}
-    >
-
       <View
-        style={[
-          styles.bottomNavIcon,
-          active &&
-            styles.bottomNavIconActive,
-        ]}
+        style={
+          styles.quickIcon
+        }
       >
-
         <Ionicons
           name={
-            active
-              ? icon
-              : outlineIcon
+            icon
           }
-          size={21}
+          size={19}
           color={
-            active
-              ? colors.accent
-              : colors.textMuted
+            colors.accent
           }
         />
-
       </View>
 
-
       <Text
-        style={[
-          styles.bottomNavLabel,
-          active &&
-            styles.bottomNavLabelActive,
-        ]}
+        style={
+          styles.quickTitle
+        }
       >
-        {label}
+        {title}
       </Text>
-
-    </Pressable>
+    </TouchableOpacity>
   );
 }
-
 
 // =========================================================
 // STYLES
 // =========================================================
 
-const styles = StyleSheet.create({
-
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-
-  // =======================================================
-  // HEADER
-  // =======================================================
-
-  header: {
-    minHeight:
-      Platform.OS === 'web'
-        ? 76
-        : 68,
-
-    paddingHorizontal:
-      spacing.screenHorizontal,
-
-    paddingTop:
-      Platform.OS === 'web'
-        ? 16
-        : 10,
-
-    paddingBottom: 10,
-
-    backgroundColor:
-      colors.white,
-
-    borderBottomWidth: 1,
-
-    borderBottomColor:
-      colors.borderLight,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-
-    justifyContent: 'space-between',
-  },
-
-
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-
-  brandIcon: {
-    width: 40,
-    height: 40,
-
-    borderRadius: 12,
-
-    backgroundColor:
-      colors.accent,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    marginRight: 10,
-  },
-
-
-  brandName: {
-    fontFamily: 'InterBold',
-    fontSize: 16,
-    color: colors.primary,
-  },
-
-
-  brandSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-
-
-  profileButton: {
-    width: 42,
-    height: 42,
-
-    borderRadius: 21,
-
-    backgroundColor:
-      colors.background,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-  },
-
-
-  // =======================================================
-  // CONTENT
-  // =======================================================
-
-  scrollContent: {
-    paddingHorizontal:
-      spacing.screenHorizontal,
-
-    paddingTop: 20,
-
-    paddingBottom: 120,
-  },
-
-
-  // =======================================================
-  // WELCOME
-  // =======================================================
-
-  welcomeSection: {
-    backgroundColor:
-      colors.primary,
-
-    borderRadius: 20,
-
-    padding: 20,
-
-    flexDirection: 'row',
-
-    alignItems: 'flex-start',
-
-    justifyContent: 'space-between',
-
-    marginBottom: 22,
-
-    overflow: 'hidden',
-  },
-
-
-  welcomeTextContainer: {
-    flex: 1,
-    paddingRight: 10,
-  },
-
-
-  greeting: {
-    fontFamily: 'InterMedium',
-    fontSize: 13,
-    color: '#CBD5E1',
-    marginBottom: 3,
-  },
-
-
-  name: {
-    fontFamily: 'InterBold',
-    fontSize: 24,
-    color: colors.white,
-    marginBottom: 7,
-  },
-
-
-  welcomeDescription: {
-    fontFamily: 'InterRegular',
-    fontSize: 11,
-    lineHeight: 17,
-    color: '#CBD5E1',
-    maxWidth: 250,
-  },
-
-
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    backgroundColor:
-      'rgba(255,255,255,0.10)',
-
-    borderRadius: 999,
-
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-
-
-  statusDot: {
-    width: 7,
-    height: 7,
-
-    borderRadius: 4,
-
-    backgroundColor:
-      colors.success,
-
-    marginRight: 6,
-  },
-
-
-  statusText: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 9,
-    color: colors.white,
-  },
-
-
-  // =======================================================
-  // SECTION
-  // =======================================================
-
-  sectionHeader: {
-    marginBottom: 12,
-    marginTop: 2,
-  },
-
-
-  sectionTitle: {
-    fontFamily: 'InterBold',
-    fontSize: 16,
-    color: colors.text,
-  },
-
-
-  sectionSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 3,
-  },
-
-
-  // =======================================================
-  // KPI
-  // =======================================================
-
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-
-
-  kpiCard: {
-    width: '48.3%',
-
-    backgroundColor:
-      colors.white,
-
-    borderRadius: 16,
-
-    padding: 14,
-
-    marginBottom: 10,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.borderLight,
-
-    ...Platform.select({
-
-      web: {
-        boxShadow:
-          '0px 2px 8px rgba(15, 23, 42, 0.05)',
-      },
-
-      default: {
-        shadowColor:
-          colors.shadow,
-
-        shadowOffset: {
-          width: 0,
-          height: 2,
-        },
-
-        shadowOpacity: 0.04,
-
-        shadowRadius: 7,
-
-        elevation: 2,
-      },
-
-    }),
-  },
-
-
-  kpiTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-
-
-  kpiIcon: {
-    width: 34,
-    height: 34,
-
-    borderRadius: 10,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-
-  kpiTitle: {
-    fontFamily: 'InterMedium',
-    fontSize: 10,
-    color: colors.textMuted,
-    marginBottom: 2,
-  },
-
-
-  kpiValue: {
-    fontFamily: 'InterBold',
-    fontSize: 22,
-    color: colors.text,
-    marginBottom: 2,
-  },
-
-
-  kpiSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textLight,
-  },
-
-
-  // =======================================================
-  // ACTIVE SERVICE
-  // =======================================================
-
-  emptyCard: {
-    backgroundColor:
-      colors.white,
-
-    borderRadius: 16,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.border,
-
-    padding: 16,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-
-    marginBottom: 24,
-  },
-
-
-  emptyIcon: {
-    width: 46,
-    height: 46,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      colors.background,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    marginRight: 12,
-  },
-
-
-  emptyContent: {
-    flex: 1,
-  },
-
-
-  emptyTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 13,
-    color: colors.text,
-    marginBottom: 3,
-  },
-
-
-  emptyDescription: {
-    fontFamily: 'InterRegular',
-    fontSize: 10,
-    lineHeight: 15,
-    color: colors.textMuted,
-  },
-
-
-  // =======================================================
-  // QUICK ACTIONS
-  // =======================================================
-
-  quickActions: {
-    marginBottom: 24,
-  },
-
-
-  quickAction: {
-    backgroundColor:
-      colors.white,
-
-    borderRadius: 14,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.borderLight,
-
-    minHeight: 62,
-
-    paddingHorizontal: 13,
-
-    marginBottom: 9,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-  },
-
-
-  quickIcon: {
-    width: 38,
-    height: 38,
-
-    borderRadius: 11,
-
-    backgroundColor:
-      colors.accentLight,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    marginRight: 11,
-  },
-
-
-  quickContent: {
-    flex: 1,
-  },
-
-
-  quickTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
-    color: colors.text,
-    marginBottom: 2,
-  },
-
-
-  quickSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textMuted,
-  },
-
-
-  // =======================================================
-  // PARTNER CARD
-  // =======================================================
-
-  partnerCard: {
-    backgroundColor:
-      colors.accentLight,
-
-    borderRadius: 16,
-
-    padding: 15,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-
-    marginBottom: 20,
-  },
-
-
-  partnerIcon: {
-    width: 42,
-    height: 42,
-
-    borderRadius: 12,
-
-    backgroundColor:
-      colors.white,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    marginRight: 11,
-  },
-
-
-  partnerContent: {
-    flex: 1,
-  },
-
-
-  partnerTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
-    color: colors.primary,
-    marginBottom: 3,
-  },
-
-
-  partnerText: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    lineHeight: 14,
-    color: colors.textSecondary,
-  },
-
-
-  // =======================================================
-  // LOGOUT
-  // =======================================================
-
-  logoutButton: {
-    height: 48,
-
-    borderRadius: 13,
-
-    borderWidth: 1,
-
-    borderColor:
-      colors.dangerLight,
-
-    backgroundColor:
-      colors.white,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    marginBottom: 14,
-  },
-
-
-  logoutText: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 11,
-    color: colors.danger,
-    marginLeft: 7,
-  },
-
-
-  version: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textLight,
-    textAlign: 'center',
-  },
-
-
-  // =======================================================
-  // BOTTOM NAVIGATION
-  // =======================================================
-
-  bottomNavigation: {
-    position: 'absolute',
-
-    left: 0,
-    right: 0,
-    bottom: 0,
-
-    height: 76,
-
-    backgroundColor:
-      colors.white,
-
-    borderTopWidth: 1,
-
-    borderTopColor:
-      colors.borderLight,
-
-    flexDirection: 'row',
-
-    alignItems: 'center',
-
-    justifyContent: 'space-around',
-
-    paddingHorizontal: 6,
-
-    paddingBottom:
-      Platform.OS === 'web'
-        ? 4
-        : 8,
-
-    ...Platform.select({
-
-      web: {
-        boxShadow:
-          '0px -2px 10px rgba(15, 23, 42, 0.08)',
-      },
-
-      default: {
-        shadowColor:
-          colors.shadow,
-
-        shadowOffset: {
-          width: 0,
-          height: -3,
-        },
-
-        shadowOpacity: 0.08,
-
-        shadowRadius: 8,
-
-        elevation: 12,
-      },
-
-    }),
-  },
-
-
-  bottomNavItem: {
-    flex: 1,
-
-    height: 68,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    paddingTop: 4,
-  },
-
-
-  bottomNavIcon: {
-    width: 40,
-    height: 34,
-
-    borderRadius: 12,
-
-    alignItems: 'center',
-
-    justifyContent: 'center',
-
-    marginBottom: 2,
-  },
-
-
-  bottomNavIconActive: {
-    backgroundColor:
-      colors.accentLight,
-  },
-
-
-  bottomNavLabel: {
-    fontFamily: 'InterMedium',
-
-    fontSize: 9,
-
-    color:
-      colors.textMuted,
-  },
-
-
-  bottomNavLabelActive: {
-    fontFamily: 'InterBold',
-
-    color:
-      colors.accent,
-  },
-
-});
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+    },
+
+    loadingContainer: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+      alignItems: 'center',
+      justifyContent:
+        'center',
+    },
+
+    loadingText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 11,
+      color:
+        colors.textMuted,
+      marginTop: 12,
+    },
+
+    content: {
+      paddingHorizontal:
+        spacing.screenHorizontal,
+      paddingTop: 18,
+      paddingBottom: 105,
+    },
+
+    header: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      justifyContent:
+        'space-between',
+    },
+
+    brandRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    logoBox: {
+      width: 48,
+      height: 48,
+      borderRadius: 15,
+      backgroundColor:
+        colors.primary,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      marginRight: 10,
+    },
+
+    brandName: {
+      fontFamily:
+        'InterBold',
+      fontSize: 18,
+      color:
+        colors.text,
+    },
+
+    brandSubtitle: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.textMuted,
+      marginTop: 2,
+    },
+
+    notificationButton: {
+      width: 43,
+      height: 43,
+      borderRadius: 14,
+      backgroundColor:
+        colors.white,
+      borderWidth: 1,
+      borderColor:
+        colors.border,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      position:
+        'relative',
+    },
+
+    notificationDot: {
+      position:
+        'absolute',
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor:
+        colors.danger,
+      top: 9,
+      right: 10,
+      borderWidth: 1.5,
+      borderColor:
+        colors.white,
+    },
+
+    welcomeSection: {
+      marginTop: 28,
+    },
+
+    welcomeSmall: {
+      fontFamily:
+        'InterMedium',
+      fontSize: 11,
+      color:
+        colors.textMuted,
+    },
+
+    welcomeTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 25,
+      color:
+        colors.text,
+      marginTop: 5,
+    },
+
+    welcomeDescription: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 11,
+      lineHeight: 17,
+      color:
+        colors.textSecondary,
+      marginTop: 5,
+      maxWidth: 340,
+    },
+
+    availabilityCard: {
+      marginTop: 20,
+      backgroundColor:
+        colors.white,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding: 14,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    availabilityIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 13,
+      backgroundColor:
+        colors.successLight,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      marginRight: 10,
+    },
+
+    offlineIcon: {
+      backgroundColor:
+        colors.borderLight,
+    },
+
+    availabilityContent: {
+      flex: 1,
+    },
+
+    availabilityTitle: {
+      fontFamily:
+        'InterSemiBold',
+      fontSize: 12,
+      color:
+        colors.text,
+    },
+
+    availabilitySubtitle: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.textMuted,
+      marginTop: 3,
+    },
+
+    toggle: {
+      width: 48,
+      height: 27,
+      borderRadius: 15,
+      backgroundColor:
+        colors.border,
+      padding: 3,
+      justifyContent:
+        'center',
+      alignItems:
+        'flex-start',
+    },
+
+    toggleActive: {
+      backgroundColor:
+        colors.success,
+    },
+
+    toggleCircle: {
+      width: 21,
+      height: 21,
+      borderRadius: 11,
+      backgroundColor:
+        colors.white,
+    },
+
+    toggleCircleActive: {
+      alignSelf:
+        'flex-end',
+    },
+
+    locationStatus: {
+      marginTop: 8,
+      backgroundColor:
+        colors.successLight,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    locationStatusText: {
+      fontFamily:
+        'InterMedium',
+      fontSize: 9,
+      color:
+        colors.successDark,
+      marginLeft: 5,
+      flex: 1,
+    },
+
+    locationDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor:
+        colors.success,
+    },
+
+    sectionHeader: {
+      marginTop: 22,
+      marginBottom: 10,
+      flexDirection:
+        'row',
+      alignItems:
+        'flex-end',
+      justifyContent:
+        'space-between',
+    },
+
+    sectionTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 15,
+      color:
+        colors.text,
+    },
+
+    sectionSubtitle: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.textMuted,
+      marginTop: 3,
+    },
+
+    viewAll: {
+      fontFamily:
+        'InterSemiBold',
+      fontSize: 9,
+      color:
+        colors.accent,
+      paddingBottom: 2,
+    },
+
+    requestCard: {
+      backgroundColor:
+        colors.white,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding:
+        spacing.cardPadding,
+      marginBottom: 11,
+    },
+
+    requestTop: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    requestIcon: {
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      backgroundColor:
+        colors.accentLight,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      marginRight: 10,
+    },
+
+    requestInfo: {
+      flex: 1,
+    },
+
+    requestTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 12,
+      color:
+        colors.text,
+    },
+
+    requestDescription: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.textMuted,
+      marginTop: 3,
+    },
+
+    newBadge: {
+      backgroundColor:
+        colors.accentLight,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+
+    newBadgeText: {
+      fontFamily:
+        'InterBold',
+      fontSize: 7,
+      color:
+        colors.accent,
+    },
+
+    requestDivider: {
+      height: 1,
+      backgroundColor:
+        colors.borderLight,
+      marginVertical: 12,
+    },
+
+    requestDetail: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      marginBottom: 7,
+    },
+
+    requestDetailText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.textSecondary,
+      marginLeft: 6,
+      flex: 1,
+    },
+
+    distance: {
+      fontFamily:
+        'InterSemiBold',
+      fontSize: 9,
+      color:
+        colors.text,
+    },
+
+    requestBottom: {
+      borderTopWidth: 1,
+      borderTopColor:
+        colors.borderLight,
+      paddingTop: 11,
+      marginTop: 3,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+    },
+
+    earningLabel: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 8,
+      color:
+        colors.textMuted,
+    },
+
+    earningValue: {
+      fontFamily:
+        'InterBold',
+      fontSize: 16,
+      color:
+        colors.successDark,
+      marginTop: 2,
+    },
+
+    acceptButton: {
+      marginLeft:
+        'auto',
+      height: 38,
+      borderRadius: 11,
+      backgroundColor:
+        colors.accent,
+      paddingLeft: 11,
+      paddingRight: 9,
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 6,
+    },
+
+    acceptText: {
+      fontFamily:
+        'InterBold',
+      fontSize: 8,
+      color:
+        colors.white,
+    },
+
+    offlineCard: {
+      backgroundColor:
+        colors.white,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding: 22,
+      alignItems:
+        'center',
+    },
+
+    offlineCardIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 15,
+      backgroundColor:
+        colors.borderLight,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    offlineTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 14,
+      color:
+        colors.text,
+      marginTop: 11,
+    },
+
+    offlineText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      lineHeight: 14,
+      color:
+        colors.textMuted,
+      textAlign:
+        'center',
+      marginTop: 4,
+      maxWidth: 280,
+    },
+
+    goOnlineButton: {
+      height: 40,
+      borderRadius: 11,
+      backgroundColor:
+        colors.accent,
+      paddingHorizontal: 18,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+      marginTop: 14,
+    },
+
+    goOnlineText: {
+      fontFamily:
+        'InterBold',
+      fontSize: 9,
+      color:
+        colors.white,
+    },
+
+    emptyCard: {
+      backgroundColor:
+        colors.white,
+      borderRadius:
+        spacing.radiusLarge,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding: 22,
+      alignItems:
+        'center',
+    },
+
+    emptyIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 15,
+      backgroundColor:
+        colors.accentLight,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    emptyTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 14,
+      color:
+        colors.text,
+      marginTop: 11,
+    },
+
+    emptyText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      lineHeight: 14,
+      color:
+        colors.textMuted,
+      textAlign:
+        'center',
+      marginTop: 4,
+      maxWidth: 280,
+    },
+
+    quickRow: {
+      flexDirection:
+        'row',
+      gap: 9,
+      marginTop: 10,
+    },
+
+    quickAction: {
+      flex: 1,
+      backgroundColor:
+        colors.white,
+      borderRadius:
+        spacing.radiusMedium,
+      borderWidth: 1,
+      borderColor:
+        colors.borderLight,
+      padding: 11,
+      minHeight: 82,
+    },
+
+    quickIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor:
+        colors.accentLight,
+      alignItems:
+        'center',
+      justifyContent:
+        'center',
+    },
+
+    quickTitle: {
+      fontFamily:
+        'InterSemiBold',
+      fontSize: 9,
+      color:
+        colors.text,
+      marginTop: 8,
+    },
+
+    errorText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 9,
+      color:
+        colors.danger,
+      textAlign:
+        'center',
+      marginTop: 15,
+      marginBottom: 10,
+    },
+  });
