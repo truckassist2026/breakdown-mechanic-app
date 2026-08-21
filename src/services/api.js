@@ -1,7 +1,6 @@
 // src/services/api.js
 
-import { getToken } from '../utils/authStorage';
-
+import { getToken } from "../utils/authStorage";
 
 // =========================================================
 // BACKEND URL
@@ -9,97 +8,63 @@ import { getToken } from '../utils/authStorage';
 
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
-  'https://truck-assist-backend.onrender.com';
-
+  "https://truck-assist-backend.onrender.com";
 
 // =========================================================
 // API REQUEST
 // =========================================================
 
-export async function apiRequest(
-  endpoint,
-  options = {}
-) {
-
+export async function apiRequest(endpoint, options = {}) {
   const {
-    method = 'GET',
+    method = "GET",
     body,
     token: suppliedToken,
     headers: customHeaders = {},
   } = options;
 
-
   // =======================================================
   // GET STORED JWT
   // =======================================================
 
-  let token =
-    suppliedToken || null;
-
+  let token = suppliedToken || null;
 
   if (!token) {
-
     try {
-
-      token =
-        await getToken();
-
+      token = await getToken();
     } catch (error) {
-
-      console.error(
-        '[API] Unable to read stored token:',
-        error
-      );
+      console.error("[API] Unable to read stored token:", error);
 
       token = null;
     }
   }
-
 
   // =======================================================
   // HEADERS
   // =======================================================
 
   const headers = {
-    Accept:
-      'application/json',
+    Accept: "application/json",
 
-    'Content-Type':
-      'application/json',
+    "Content-Type": "application/json",
 
     ...customHeaders,
   };
-
 
   // =======================================================
   // JWT
   // =======================================================
 
   if (token) {
-
-    headers.Authorization =
-      `Bearer ${token}`;
-
+    headers.Authorization = `Bearer ${token}`;
   }
-
 
   // =======================================================
   // LOG
   // =======================================================
 
-  console.log(
-    '[API] Request:',
-    method,
-    endpoint
-  );
+  console.log("[API] Request:", method, endpoint);
 
-  console.log(
-    '[API] JWT:',
-    token
-      ? 'PRESENT'
-      : 'MISSING'
-  );
-
+  console.log("[API] JWT:", token ? "PRESENT" : "MISSING");
 
   // =======================================================
   // REQUEST OPTIONS
@@ -110,17 +75,9 @@ export async function apiRequest(
     headers,
   };
 
-
-  if (
-    body !== undefined &&
-    body !== null
-  ) {
-
-    requestOptions.body =
-      JSON.stringify(body);
-
+  if (body !== undefined && body !== null) {
+    requestOptions.body = JSON.stringify(body);
   }
-
 
   // =======================================================
   // FETCH
@@ -129,25 +86,12 @@ export async function apiRequest(
   let response;
 
   try {
-
-    response =
-      await fetch(
-        `${API_BASE_URL}${endpoint}`,
-        requestOptions
-      );
-
+    response = await fetch(`${API_BASE_URL}${endpoint}`, requestOptions);
   } catch (error) {
+    console.error("[API] Network error:", error);
 
-    console.error(
-      '[API] Network error:',
-      error
-    );
-
-    throw new Error(
-      'Unable to connect to Truck Assist backend.'
-    );
+    throw new Error("Unable to connect to Truck Assist backend.");
   }
-
 
   // =======================================================
   // RESPONSE
@@ -155,261 +99,155 @@ export async function apiRequest(
 
   let data = null;
 
-
   try {
+    const contentType = response.headers.get("content-type");
 
-    const contentType =
-      response.headers.get(
-        'content-type'
-      );
-
-
-    if (
-      contentType &&
-      contentType.includes(
-        'application/json'
-      )
-    ) {
-
-      data =
-        await response.json();
-
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
     } else {
+      const text = await response.text();
 
-      const text =
-        await response.text();
-
-      data =
-        text || null;
-
+      data = text || null;
     }
-
   } catch (error) {
-
-    console.warn(
-      '[API] Unable to parse response:',
-      error
-    );
+    console.warn("[API] Unable to parse response:", error);
 
     data = null;
   }
-
 
   // =======================================================
   // ERROR
   // =======================================================
 
   if (!response.ok) {
+    const isExpectedMissingPayment =
+      response.status === 404 &&
+      endpoint.includes("/api/v1/payments/requests/") &&
+      method === "GET" &&
+      String(data?.message || "")
+        .trim()
+        .toLowerCase() === "payment not found";
 
-    console.error(
-      '[API] Error:',
-      {
+    if (!isExpectedMissingPayment) {
+      console.error("[API] Error:", {
         endpoint,
         method,
-        status:
-          response.status,
+        status: response.status,
         data,
-      }
-    );
-
-
-    let message =
-      `Request failed with status ${response.status}`;
-
-
-    if (
-      typeof data ===
-      'string'
-    ) {
-
-      message =
-        data ||
-        message;
-
-    } else if (
-      data?.message
-    ) {
-
-      message =
-        data.message;
-
-    } else if (
-      data?.error
-    ) {
-
-      message =
-        data.error;
-
-    } else if (
-      data?.detail
-    ) {
-
-      message =
-        data.detail;
-
+      });
+    } else {
+      console.log("[API] Expected state: payment has not been generated yet.", {
+        endpoint,
+        method,
+        status: response.status,
+      });
     }
 
+    let message = `Request failed with status ${response.status}`;
+
+    if (typeof data === "string") {
+      message = data || message;
+    } else if (data?.message) {
+      message = data.message;
+    } else if (data?.error) {
+      message = data.error;
+    } else if (data?.detail) {
+      message = data.detail;
+    }
 
     // -----------------------------------------------------
     // AUTHENTICATION
     // -----------------------------------------------------
 
-    if (
-      response.status === 401
-    ) {
-
-      message =
-        'Your mechanic session has expired. Please login again.';
-
+    if (response.status === 401) {
+      message = "Your mechanic session has expired. Please login again.";
     }
-
 
     // -----------------------------------------------------
     // AUTHORIZATION
     // -----------------------------------------------------
 
-    if (
-      response.status === 403
-    ) {
-
+    if (response.status === 403) {
       message =
         data?.message ||
         data?.error ||
-        'You are not authorized to perform this action.';
-
+        "You are not authorized to perform this action.";
     }
 
+    const error = new Error(message);
 
-    const error =
-      new Error(message);
+    error.status = response.status;
 
+    error.data = data;
 
-    error.status =
-      response.status;
-
-    error.data =
-      data;
-
-    error.endpoint =
-      endpoint;
-
+    error.endpoint = endpoint;
 
     throw error;
   }
-
 
   // =======================================================
   // SUCCESS
   // =======================================================
 
-  console.log(
-    '[API] Success:',
-    method,
-    endpoint,
-    response.status
-  );
-
+  console.log("[API] Success:", method, endpoint, response.status);
 
   return data;
 }
-
 
 // =========================================================
 // GET
 // =========================================================
 
-export async function apiGet(
-  endpoint,
-  options = {}
-) {
-
-  return apiRequest(
-    endpoint,
-    {
-      ...options,
-      method: 'GET',
-    }
-  );
+export async function apiGet(endpoint, options = {}) {
+  return apiRequest(endpoint, {
+    ...options,
+    method: "GET",
+  });
 }
-
 
 // =========================================================
 // POST
 // =========================================================
 
-export async function apiPost(
-  endpoint,
-  body,
-  options = {}
-) {
-
-  return apiRequest(
-    endpoint,
-    {
-      ...options,
-      method: 'POST',
-      body,
-    }
-  );
+export async function apiPost(endpoint, body, options = {}) {
+  return apiRequest(endpoint, {
+    ...options,
+    method: "POST",
+    body,
+  });
 }
-
 
 // =========================================================
 // PUT
 // =========================================================
 
-export async function apiPut(
-  endpoint,
-  body,
-  options = {}
-) {
-
-  return apiRequest(
-    endpoint,
-    {
-      ...options,
-      method: 'PUT',
-      body,
-    }
-  );
+export async function apiPut(endpoint, body, options = {}) {
+  return apiRequest(endpoint, {
+    ...options,
+    method: "PUT",
+    body,
+  });
 }
-
 
 // =========================================================
 // PATCH
 // =========================================================
 
-export async function apiPatch(
-  endpoint,
-  body,
-  options = {}
-) {
-
-  return apiRequest(
-    endpoint,
-    {
-      ...options,
-      method: 'PATCH',
-      body,
-    }
-  );
+export async function apiPatch(endpoint, body, options = {}) {
+  return apiRequest(endpoint, {
+    ...options,
+    method: "PATCH",
+    body,
+  });
 }
-
 
 // =========================================================
 // DELETE
 // =========================================================
 
-export async function apiDelete(
-  endpoint,
-  options = {}
-) {
-
-  return apiRequest(
-    endpoint,
-    {
-      ...options,
-      method: 'DELETE',
-    }
-  );
+export async function apiDelete(endpoint, options = {}) {
+  return apiRequest(endpoint, {
+    ...options,
+    method: "DELETE",
+  });
 }

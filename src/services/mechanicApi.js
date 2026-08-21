@@ -1,6 +1,5 @@
 import { apiRequest } from './api';
 
-
 // =========================================================
 // MECHANIC ENDPOINTS
 // =========================================================
@@ -61,6 +60,20 @@ const MECHANIC_ENDPOINTS = {
     `/api/v1/mechanics/requests/${encodeURIComponent(
       String(requestId)
     )}/status`,
+
+  // -------------------------------------------------------
+  // PAYMENT
+  // -------------------------------------------------------
+
+  initiatePayment: (requestId) =>
+    `/api/v1/payments/requests/${encodeURIComponent(
+      String(requestId)
+    )}/initiate`,
+
+  paymentByRequest: (requestId) =>
+    `/api/v1/payments/requests/${encodeURIComponent(
+      String(requestId)
+    )}`,
 };
 
 
@@ -180,6 +193,7 @@ export async function updateMechanicLocation(
     );
   }
 
+
   console.log(
     '[Mechanic API] Updating location:',
     {
@@ -188,12 +202,14 @@ export async function updateMechanicLocation(
     }
   );
 
+
   return apiRequest(
     MECHANIC_ENDPOINTS.location,
     {
       method: 'PATCH',
 
       body: {
+
         latitude:
           Number(latitude),
 
@@ -208,17 +224,13 @@ export async function updateMechanicLocation(
 // =========================================================
 // GET AVAILABLE SERVICE REQUESTS
 // =========================================================
-//
-// Backend:
-// GET /api/v1/mechanics/requests
-//
-// =========================================================
 
 export async function getMechanicRequests() {
 
   console.log(
     '[Mechanic API] Getting available requests'
   );
+
 
   const response =
     await apiRequest(
@@ -228,10 +240,12 @@ export async function getMechanicRequests() {
       }
     );
 
+
   console.log(
     '[Mechanic API] Available requests:',
     response
   );
+
 
   return response;
 }
@@ -239,11 +253,6 @@ export async function getMechanicRequests() {
 
 // =========================================================
 // GET SERVICE REQUEST BY ID
-// =========================================================
-//
-// Backend:
-// GET /api/v1/mechanics/requests/{requestId}
-//
 // =========================================================
 
 export async function getMechanicRequestById(
@@ -257,8 +266,10 @@ export async function getMechanicRequestById(
     );
   }
 
+
   const cleanRequestId =
     String(requestId).trim();
+
 
   if (!cleanRequestId) {
 
@@ -267,20 +278,24 @@ export async function getMechanicRequestById(
     );
   }
 
+
   console.log(
     '[Mechanic API] Getting request by ID:',
     cleanRequestId
   );
+
 
   const endpoint =
     MECHANIC_ENDPOINTS.requestById(
       cleanRequestId
     );
 
+
   console.log(
     '[Mechanic API] Request details endpoint:',
     endpoint
   );
+
 
   const response =
     await apiRequest(
@@ -290,10 +305,12 @@ export async function getMechanicRequestById(
       }
     );
 
+
   console.log(
     '[Mechanic API] Request details response:',
     response
   );
+
 
   return response;
 }
@@ -301,14 +318,6 @@ export async function getMechanicRequestById(
 
 // =========================================================
 // ACCEPT SERVICE REQUEST
-// =========================================================
-//
-// Backend:
-// PATCH /api/v1/mechanics/requests/{requestId}/accept
-//
-// Result:
-// SEARCHING → ASSIGNED
-//
 // =========================================================
 
 export async function acceptMechanicRequest(
@@ -322,8 +331,10 @@ export async function acceptMechanicRequest(
     );
   }
 
+
   const cleanRequestId =
     String(requestId).trim();
+
 
   if (!cleanRequestId) {
 
@@ -332,20 +343,24 @@ export async function acceptMechanicRequest(
     );
   }
 
+
   console.log(
     '[Mechanic API] Accepting request:',
     cleanRequestId
   );
+
 
   const endpoint =
     MECHANIC_ENDPOINTS.acceptRequest(
       cleanRequestId
     );
 
+
   console.log(
     '[Mechanic API] Accept endpoint:',
     endpoint
   );
+
 
   const response =
     await apiRequest(
@@ -355,10 +370,12 @@ export async function acceptMechanicRequest(
       }
     );
 
+
   console.log(
     '[Mechanic API] Accept response:',
     response
   );
+
 
   return response;
 }
@@ -366,25 +383,6 @@ export async function acceptMechanicRequest(
 
 // =========================================================
 // UPDATE SERVICE REQUEST STATUS
-// =========================================================
-//
-// Backend:
-//
-// PATCH
-// /api/v1/mechanics/requests/{requestId}/status?status=STATUS
-//
-// Supported flow:
-//
-// ASSIGNED
-//     ↓
-// MECHANIC_EN_ROUTE
-//     ↓
-// ARRIVED
-//     ↓
-// IN_PROGRESS
-//     ↓
-// PAYMENT_PENDING
-//
 // =========================================================
 
 export async function updateMechanicRequestStatus(
@@ -442,22 +440,21 @@ export async function updateMechanicRequestStatus(
   }
 
 
-  // -------------------------------------------------------
-  // LOG
-  // -------------------------------------------------------
-
   console.log(
     '===================================='
   );
+
 
   console.log(
     '[Mechanic API] Updating request status'
   );
 
+
   console.log(
     '[Mechanic API] Request ID:',
     cleanRequestId
   );
+
 
   console.log(
     '[Mechanic API] New status:',
@@ -547,12 +544,6 @@ export async function updateMechanicRequestStatus(
 // =========================================================
 // START TRAVEL
 // =========================================================
-//
-// ASSIGNED
-//     ↓
-// MECHANIC_EN_ROUTE
-//
-// =========================================================
 
 export async function startMechanicTravel(
   requestId
@@ -573,12 +564,6 @@ export async function startMechanicTravel(
 
 // =========================================================
 // ARRIVE AT LOCATION
-// =========================================================
-//
-// MECHANIC_EN_ROUTE
-//     ↓
-// ARRIVED
-//
 // =========================================================
 
 export async function arriveAtLocation(
@@ -601,12 +586,6 @@ export async function arriveAtLocation(
 // =========================================================
 // START SERVICE
 // =========================================================
-//
-// ARRIVED
-//     ↓
-// IN_PROGRESS
-//
-// =========================================================
 
 export async function startMechanicService(
   requestId
@@ -628,12 +607,6 @@ export async function startMechanicService(
 // =========================================================
 // MARK PAYMENT PENDING
 // =========================================================
-//
-// IN_PROGRESS
-//     ↓
-// PAYMENT_PENDING
-//
-// =========================================================
 
 export async function markPaymentPending(
   requestId
@@ -653,30 +626,319 @@ export async function markPaymentPending(
 
 
 // =========================================================
+// INITIATE SERVICE PAYMENT / GENERATE BILL
+// =========================================================
+//
+// IMPORTANT:
+//
+// This is called by the MECHANIC after completing
+// the service.
+//
+// IN_PROGRESS
+//      ↓
+// POST /payments/requests/{id}/initiate
+//      ↓
+// PAYMENT_PENDING
+//
+// The DRIVER will then pay.
+//
+
+export async function initiateServicePayment(
+  requestId,
+  amount,
+  notes = null
+) {
+
+  if (!requestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+
+  const cleanRequestId =
+    String(requestId).trim();
+
+
+  if (!cleanRequestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+
+  const numericAmount =
+    Number(
+      String(amount)
+        .replace(/,/g, '')
+        .trim()
+    );
+
+
+  if (
+    !Number.isFinite(
+      numericAmount
+    ) ||
+    numericAmount <= 0
+  ) {
+
+    throw new Error(
+      'Valid payment amount is required.'
+    );
+  }
+
+
+  console.log(
+    '===================================='
+  );
+
+
+  console.log(
+    '[Mechanic API] Generating service bill'
+  );
+
+
+  console.log(
+    '[Mechanic API] Request ID:',
+    cleanRequestId
+  );
+
+
+  console.log(
+    '[Mechanic API] Amount:',
+    numericAmount
+  );
+
+
+  console.log(
+    '[Mechanic API] Notes:',
+    notes
+  );
+
+
+  const endpoint =
+    MECHANIC_ENDPOINTS.initiatePayment(
+      cleanRequestId
+    );
+
+
+  console.log(
+    '[Mechanic API] Payment endpoint:',
+    endpoint
+  );
+
+
+  try {
+
+    const response =
+      await apiRequest(
+        endpoint,
+        {
+          method: 'POST',
+
+          body: {
+
+            amount:
+              numericAmount,
+
+            notes:
+              notes?.trim() ||
+              null,
+          },
+        }
+      );
+
+
+    console.log(
+      '[Mechanic API] Payment created:',
+      response
+    );
+
+
+    console.log(
+      '===================================='
+    );
+
+
+    return response;
+
+  } catch (error) {
+
+    console.error(
+      '[Mechanic API] Payment creation failed:',
+      {
+        requestId:
+          cleanRequestId,
+
+        amount:
+          numericAmount,
+
+        error,
+      }
+    );
+
+
+    console.error(
+      '[Mechanic API] Payment error status:',
+      error?.status
+    );
+
+
+    console.error(
+      '[Mechanic API] Payment error data:',
+      error?.data
+    );
+
+
+    throw error;
+  }
+}
+
+
+// =========================================================
+// GET SERVICE PAYMENT
+// =========================================================
+//
+// Used by the Mechanic app to monitor the payment
+// after the bill has been generated.
+//
+
+export async function getServicePayment(
+  requestId
+) {
+
+  if (!requestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+
+  const cleanRequestId =
+    String(requestId).trim();
+
+
+  if (!cleanRequestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+
+  const endpoint =
+    MECHANIC_ENDPOINTS.paymentByRequest(
+      cleanRequestId
+    );
+
+
+  console.log(
+    '[Mechanic API] Getting service payment:',
+    endpoint
+  );
+
+
+  try {
+
+    const response =
+      await apiRequest(
+        endpoint,
+        {
+          method: 'GET',
+        }
+      );
+
+
+    console.log(
+      '[Mechanic API] Payment response:',
+      response
+    );
+
+
+    return response;
+
+  } catch (error) {
+
+    // -------------------------------------------------------
+    // EXPECTED STATE BEFORE BILL GENERATION
+    // -------------------------------------------------------
+    //
+    // The backend returns 404 "Payment not found" when the
+    // mechanic has not generated a bill yet. This is NOT an
+    // application error. Return null so the payment screen
+    // can show the Generate Bill state.
+    //
+    if (
+      error?.status === 404 &&
+      String(error?.data?.message || '').trim().toLowerCase() ===
+        'payment not found'
+    ) {
+
+      console.log(
+        '[Mechanic API] No payment exists yet - bill has not been generated.'
+      );
+
+      return null;
+    }
+
+    console.error(
+      '[Mechanic API] Payment load failed:',
+      {
+        requestId:
+          cleanRequestId,
+
+        status:
+          error?.status,
+
+        data:
+          error?.data,
+
+        error,
+      }
+    );
+
+    throw error;
+  }
+}
+
+
+// =========================================================
 // DEFAULT EXPORT
 // =========================================================
 
 export default {
 
   // Profile
+
   getMyMechanicProfile,
 
   updateMyMechanicProfile,
 
+
   // Availability
+
   updateMechanicAvailability,
 
+
   // Location
+
   updateMechanicLocation,
 
+
   // Requests
+
   getMechanicRequests,
 
   getMechanicRequestById,
 
   acceptMechanicRequest,
 
+
   // Status
+
   updateMechanicRequestStatus,
 
   startMechanicTravel,
@@ -686,4 +948,11 @@ export default {
   startMechanicService,
 
   markPaymentPending,
+
+
+  // Payment
+
+  initiateServicePayment,
+
+  getServicePayment,
 };

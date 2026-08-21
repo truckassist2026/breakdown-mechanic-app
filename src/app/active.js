@@ -26,11 +26,11 @@ import {
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
+import BottomNavigation from '../components/BottomNavigation';
 import {
   getMechanicRequestById,
   updateMechanicRequestStatus,
 } from '../services/mechanicApi';
-import BottomNavigation from '../components/BottomNavigation';
 
 // =========================================================
 // HELPERS
