@@ -1,9 +1,8 @@
-import { Platform } from 'react-native';
-
 import { useCallback, useEffect, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -150,23 +149,15 @@ export default function RequestsScreen() {
          * request.
          */
 
-        const availableRequests =
-          data.filter(
-            (request) =>
-              !request?.status ||
-              request.status ===
-                'SEARCHING'
-          );
-
-
+        // Backend is the source of truth for available requests.
+        // Do not filter the response again on the client.
         console.log(
           '[MECHANIC REQUESTS] Count:',
-          availableRequests.length
+          data.length
         );
 
-
         setRequests(
-          availableRequests
+          data
         );
 
 
@@ -706,6 +697,18 @@ function BottomNavigation({
         }
         onPress={() =>
           navigate('/requests')
+        }
+      />
+
+      <BottomNavItem
+        icon="construct"
+        outlineIcon="construct-outline"
+        label="Active"
+        active={
+          active === 'active'
+        }
+        onPress={() =>
+          navigate('/active')
         }
       />
 

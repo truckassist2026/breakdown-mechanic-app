@@ -32,6 +32,8 @@ import {
   getMechanicRequestById,
 } from '../services/mechanicApi';
 
+import BottomNavigation from '../components/BottomNavigation';
+
 
 // =========================================================
 // CATEGORY CONFIG
@@ -2027,6 +2029,10 @@ export default function RequestDetailsScreen() {
 
       </View>
 
+      <BottomNavigation
+        active="requests"
+      />
+
     </View>
 
   );
@@ -2056,7 +2062,7 @@ const styles =
       paddingHorizontal:
         spacing.screenHorizontal,
       paddingTop: 18,
-      paddingBottom: 120,
+      paddingBottom: 190,
     },
 
 
@@ -2605,7 +2611,7 @@ const styles =
       position: 'absolute',
       left: 0,
       right: 0,
-      bottom: 0,
+      bottom: 70,
       paddingHorizontal: 16,
       paddingTop: 10,
       paddingBottom: 16,

@@ -1,10 +1,12 @@
 import { apiRequest } from './api';
 
+
 // =========================================================
 // MECHANIC ENDPOINTS
 // =========================================================
 
 const MECHANIC_ENDPOINTS = {
+
   // -------------------------------------------------------
   // PROFILE
   // -------------------------------------------------------
@@ -50,6 +52,15 @@ const MECHANIC_ENDPOINTS = {
     `/api/v1/mechanics/requests/${encodeURIComponent(
       String(requestId)
     )}/accept`,
+
+  // -------------------------------------------------------
+  // UPDATE REQUEST STATUS
+  // -------------------------------------------------------
+
+  requestStatus: (requestId) =>
+    `/api/v1/mechanics/requests/${encodeURIComponent(
+      String(requestId)
+    )}/status`,
 };
 
 
@@ -169,7 +180,6 @@ export async function updateMechanicLocation(
     );
   }
 
-
   console.log(
     '[Mechanic API] Updating location:',
     {
@@ -177,7 +187,6 @@ export async function updateMechanicLocation(
       longitude,
     }
   );
-
 
   return apiRequest(
     MECHANIC_ENDPOINTS.location,
@@ -211,7 +220,6 @@ export async function getMechanicRequests() {
     '[Mechanic API] Getting available requests'
   );
 
-
   const response =
     await apiRequest(
       MECHANIC_ENDPOINTS.requests,
@@ -220,12 +228,10 @@ export async function getMechanicRequests() {
       }
     );
 
-
   console.log(
     '[Mechanic API] Available requests:',
     response
   );
-
 
   return response;
 }
@@ -251,10 +257,8 @@ export async function getMechanicRequestById(
     );
   }
 
-
   const cleanRequestId =
     String(requestId).trim();
-
 
   if (!cleanRequestId) {
 
@@ -263,24 +267,20 @@ export async function getMechanicRequestById(
     );
   }
 
-
   console.log(
     '[Mechanic API] Getting request by ID:',
     cleanRequestId
   );
-
 
   const endpoint =
     MECHANIC_ENDPOINTS.requestById(
       cleanRequestId
     );
 
-
   console.log(
     '[Mechanic API] Request details endpoint:',
     endpoint
   );
-
 
   const response =
     await apiRequest(
@@ -290,12 +290,10 @@ export async function getMechanicRequestById(
       }
     );
 
-
   console.log(
     '[Mechanic API] Request details response:',
     response
   );
-
 
   return response;
 }
@@ -308,11 +306,95 @@ export async function getMechanicRequestById(
 // Backend:
 // PATCH /api/v1/mechanics/requests/{requestId}/accept
 //
+// Result:
+// SEARCHING → ASSIGNED
+//
 // =========================================================
 
 export async function acceptMechanicRequest(
   requestId
 ) {
+
+  if (!requestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+  const cleanRequestId =
+    String(requestId).trim();
+
+  if (!cleanRequestId) {
+
+    throw new Error(
+      'Request ID is required.'
+    );
+  }
+
+  console.log(
+    '[Mechanic API] Accepting request:',
+    cleanRequestId
+  );
+
+  const endpoint =
+    MECHANIC_ENDPOINTS.acceptRequest(
+      cleanRequestId
+    );
+
+  console.log(
+    '[Mechanic API] Accept endpoint:',
+    endpoint
+  );
+
+  const response =
+    await apiRequest(
+      endpoint,
+      {
+        method: 'PATCH',
+      }
+    );
+
+  console.log(
+    '[Mechanic API] Accept response:',
+    response
+  );
+
+  return response;
+}
+
+
+// =========================================================
+// UPDATE SERVICE REQUEST STATUS
+// =========================================================
+//
+// Backend:
+//
+// PATCH
+// /api/v1/mechanics/requests/{requestId}/status?status=STATUS
+//
+// Supported flow:
+//
+// ASSIGNED
+//     ↓
+// MECHANIC_EN_ROUTE
+//     ↓
+// ARRIVED
+//     ↓
+// IN_PROGRESS
+//     ↓
+// PAYMENT_PENDING
+//
+// =========================================================
+
+export async function updateMechanicRequestStatus(
+  requestId,
+  status
+) {
+
+  // -------------------------------------------------------
+  // VALIDATE REQUEST ID
+  // -------------------------------------------------------
 
   if (!requestId) {
 
@@ -334,40 +416,239 @@ export async function acceptMechanicRequest(
   }
 
 
+  // -------------------------------------------------------
+  // VALIDATE STATUS
+  // -------------------------------------------------------
+
+  if (!status) {
+
+    throw new Error(
+      'Status is required.'
+    );
+  }
+
+
+  const normalizedStatus =
+    String(status)
+      .trim()
+      .toUpperCase();
+
+
+  if (!normalizedStatus) {
+
+    throw new Error(
+      'Status is required.'
+    );
+  }
+
+
+  // -------------------------------------------------------
+  // LOG
+  // -------------------------------------------------------
+
   console.log(
-    '[Mechanic API] Accepting request:',
+    '===================================='
+  );
+
+  console.log(
+    '[Mechanic API] Updating request status'
+  );
+
+  console.log(
+    '[Mechanic API] Request ID:',
     cleanRequestId
   );
 
+  console.log(
+    '[Mechanic API] New status:',
+    normalizedStatus
+  );
+
+
+  // -------------------------------------------------------
+  // BUILD ENDPOINT
+  // -------------------------------------------------------
 
   const endpoint =
-    MECHANIC_ENDPOINTS.acceptRequest(
+    `${MECHANIC_ENDPOINTS.requestStatus(
       cleanRequestId
-    );
+    )}?status=${encodeURIComponent(
+      normalizedStatus
+    )}`;
 
 
   console.log(
-    '[Mechanic API] Accept endpoint:',
+    '[Mechanic API] Status endpoint:',
     endpoint
   );
 
 
-  const response =
-    await apiRequest(
-      endpoint,
+  // -------------------------------------------------------
+  // API CALL
+  // -------------------------------------------------------
+
+  try {
+
+    const response =
+      await apiRequest(
+        endpoint,
+        {
+          method: 'PATCH',
+        }
+      );
+
+
+    console.log(
+      '[Mechanic API] Status update response:',
+      response
+    );
+
+
+    console.log(
+      '===================================='
+    );
+
+
+    return response;
+
+  } catch (error) {
+
+    console.error(
+      '[Mechanic API] Status update failed:',
       {
-        method: 'PATCH',
+        requestId:
+          cleanRequestId,
+
+        status:
+          normalizedStatus,
+
+        error,
       }
     );
 
 
+    console.error(
+      '[Mechanic API] Error status:',
+      error?.status
+    );
+
+
+    console.error(
+      '[Mechanic API] Error data:',
+      error?.data
+    );
+
+
+    throw error;
+  }
+}
+
+
+// =========================================================
+// START TRAVEL
+// =========================================================
+//
+// ASSIGNED
+//     ↓
+// MECHANIC_EN_ROUTE
+//
+// =========================================================
+
+export async function startMechanicTravel(
+  requestId
+) {
+
   console.log(
-    '[Mechanic API] Accept response:',
-    response
+    '[Mechanic API] Starting mechanic travel:',
+    requestId
   );
 
 
-  return response;
+  return updateMechanicRequestStatus(
+    requestId,
+    'MECHANIC_EN_ROUTE'
+  );
+}
+
+
+// =========================================================
+// ARRIVE AT LOCATION
+// =========================================================
+//
+// MECHANIC_EN_ROUTE
+//     ↓
+// ARRIVED
+//
+// =========================================================
+
+export async function arriveAtLocation(
+  requestId
+) {
+
+  console.log(
+    '[Mechanic API] Mechanic arrived:',
+    requestId
+  );
+
+
+  return updateMechanicRequestStatus(
+    requestId,
+    'ARRIVED'
+  );
+}
+
+
+// =========================================================
+// START SERVICE
+// =========================================================
+//
+// ARRIVED
+//     ↓
+// IN_PROGRESS
+//
+// =========================================================
+
+export async function startMechanicService(
+  requestId
+) {
+
+  console.log(
+    '[Mechanic API] Starting mechanic service:',
+    requestId
+  );
+
+
+  return updateMechanicRequestStatus(
+    requestId,
+    'IN_PROGRESS'
+  );
+}
+
+
+// =========================================================
+// MARK PAYMENT PENDING
+// =========================================================
+//
+// IN_PROGRESS
+//     ↓
+// PAYMENT_PENDING
+//
+// =========================================================
+
+export async function markPaymentPending(
+  requestId
+) {
+
+  console.log(
+    '[Mechanic API] Marking payment pending:',
+    requestId
+  );
+
+
+  return updateMechanicRequestStatus(
+    requestId,
+    'PAYMENT_PENDING'
+  );
 }
 
 
@@ -377,17 +658,32 @@ export async function acceptMechanicRequest(
 
 export default {
 
+  // Profile
   getMyMechanicProfile,
 
   updateMyMechanicProfile,
 
+  // Availability
   updateMechanicAvailability,
 
+  // Location
   updateMechanicLocation,
 
+  // Requests
   getMechanicRequests,
 
   getMechanicRequestById,
 
   acceptMechanicRequest,
+
+  // Status
+  updateMechanicRequestStatus,
+
+  startMechanicTravel,
+
+  arriveAtLocation,
+
+  startMechanicService,
+
+  markPaymentPending,
 };

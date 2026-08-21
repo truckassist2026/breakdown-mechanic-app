@@ -1,7 +1,13 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
+
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,312 +16,881 @@ import {
   View,
 } from 'react-native';
 
+import {
+  Ionicons,
+} from '@expo/vector-icons';
+
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+
 import colors from '../constants/colors';
-import spacing from '../constants/spacing';
+
+import {
+  getMechanicRequestById,
+  updateMechanicRequestStatus,
+} from '../services/mechanicApi';
 
 export default function ServiceScreen() {
+
   const router = useRouter();
-  const { requestId } = useLocalSearchParams();
 
-  const [resolved, setResolved] = useState(false);
-  const [notes, setNotes] = useState('');
+  const params = useLocalSearchParams();
 
-  const completeService = () => {
-    if (!resolved) return;
+  const requestId =
+    Array.isArray(params.requestId)
+      ? params.requestId[0]
+      : params.requestId;
 
-    router.push({
-      pathname: '/payment',
-      params: {
-        requestId: requestId || 'REQ001',
+  const [
+    request,
+    setRequest,
+  ] = useState(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    updating,
+    setUpdating,
+  ] = useState(false);
+
+  const [
+    notes,
+    setNotes,
+  ] = useState('');
+
+  const loadRequest =
+    useCallback(
+      async (
+        showLoader = false
+      ) => {
+
+        if (!requestId) {
+          setLoading(false);
+          return;
+        }
+
+        try {
+
+          if (showLoader) {
+            setLoading(true);
+          }
+
+          const response =
+            await getMechanicRequestById(
+              requestId
+            );
+
+          console.log(
+            '[MECHANIC SERVICE] Backend status:',
+            response?.status
+          );
+
+          setRequest(response);
+
+        } catch (err) {
+
+          console.error(
+            '[MECHANIC SERVICE] Load failed:',
+            err
+          );
+
+        } finally {
+
+          setLoading(false);
+
+        }
       },
-    });
-  };
+      [requestId]
+    );
+
+  useEffect(() => {
+
+    loadRequest(true);
+
+    const interval =
+      setInterval(
+        () => loadRequest(false),
+        2000
+      );
+
+    return () => {
+      clearInterval(interval);
+    };
+
+  }, [loadRequest]);
+
+  const status =
+    String(
+      request?.status || ''
+    )
+      .trim()
+      .toUpperCase();
+
+  const mechanic =
+    request?.mechanic ||
+    null;
+
+  const driver =
+    request?.driver ||
+    null;
+
+  const vehicle =
+    request?.vehicle ||
+    null;
+
+  const category =
+    String(
+      request?.category ||
+      'OTHER'
+    ).toUpperCase();
+
+  const serviceName =
+    category === 'BATTERY'
+      ? 'Battery inspection'
+      : category === 'TYRE'
+        ? 'Tyre service'
+        : category === 'FUEL'
+          ? 'Fuel assistance'
+          : category === 'BREAKDOWN'
+            ? 'Vehicle breakdown service'
+            : 'Roadside assistance';
+
+  const serviceDescription =
+    request?.description ||
+    'Working on the vehicle.';
+
+  const vehicleName =
+    [
+      vehicle?.manufacturer,
+      vehicle?.model,
+    ]
+      .filter(Boolean)
+      .join(' ') ||
+    'Vehicle';
+
+  const vehicleNumber =
+    vehicle?.registrationNumber ||
+    'Vehicle number unavailable';
+
+  const mechanicName =
+    mechanic?.name ||
+    'Mechanic';
+
+  const driverName =
+    driver?.name ||
+    'Driver';
+
+  const driverPhone =
+    driver?.phone ||
+    '';
+
+  const rating =
+    mechanic?.rating !== null &&
+    mechanic?.rating !== undefined
+      ? Number(mechanic.rating).toFixed(1)
+      : '--';
+
+  const jobs =
+    mechanic?.totalJobs ?? 0;
+
+  const updateStatus =
+    async (
+      targetStatus
+    ) => {
+
+      if (
+        !requestId ||
+        updating
+      ) {
+        return false;
+      }
+
+      try {
+
+        setUpdating(true);
+
+        console.log(
+          '[MECHANIC SERVICE] Updating:',
+          {
+            requestId,
+            current: status,
+            target: targetStatus,
+          }
+        );
+
+        const response =
+          await updateMechanicRequestStatus(
+            requestId,
+            targetStatus
+          );
+
+        console.log(
+          '[MECHANIC SERVICE] Status response:',
+          response
+        );
+
+        await loadRequest(false);
+
+        return true;
+
+      } catch (err) {
+
+        console.error(
+          '[MECHANIC SERVICE] Status update failed:',
+          err
+        );
+
+        Alert.alert(
+          'Unable to Update',
+          err?.message ||
+          `Unable to update status to ${targetStatus}.`
+        );
+
+        return false;
+
+      } finally {
+
+        setUpdating(false);
+
+      }
+    };
+
+  const handleStartService =
+    async () => {
+
+      if (status !== 'ARRIVED') {
+        return;
+      }
+
+      await updateStatus(
+        'IN_PROGRESS'
+      );
+    };
+
+  const handleCompleteService =
+    async () => {
+
+      if (status !== 'IN_PROGRESS') {
+        return;
+      }
+
+      const success =
+        await updateStatus(
+          'PAYMENT_PENDING'
+        );
+
+      if (success) {
+
+        router.replace({
+          pathname:
+            '/payment',
+          params: {
+            requestId:
+              String(requestId || ''),
+          },
+        });
+
+      }
+    };
+
+  const handleCallDriver =
+    async () => {
+
+      if (!driverPhone) {
+        return;
+      }
+
+      try {
+        await Linking.openURL(
+          `tel:${driverPhone}`
+        );
+      } catch (err) {
+        console.error(
+          '[MECHANIC SERVICE] Call failed:',
+          err
+        );
+      }
+    };
+
+  if (loading && !request) {
+
+    return (
+      <View style={styles.center}>
+
+        <ActivityIndicator
+          size="large"
+          color={colors.accent}
+        />
+
+        <Text style={styles.loadingText}>
+          Loading service...
+        </Text>
+
+      </View>
+    );
+  }
+
+  if (!request) {
+
+    return (
+      <View style={styles.center}>
+
+        <Ionicons
+          name="alert-circle-outline"
+          size={38}
+          color={colors.accent}
+        />
+
+        <Text style={styles.errorTitle}>
+          Service request not found
+        </Text>
+
+        <TouchableOpacity
+          style={styles.backButtonLarge}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>
+            GO BACK
+          </Text>
+        </TouchableOpacity>
+
+      </View>
+    );
+  }
+
+  const isArrived =
+    status === 'ARRIVED';
+
+  const isInProgress =
+    status === 'IN_PROGRESS';
+
+  const isPaymentPending =
+    status === 'PAYMENT_PENDING';
+
+  const accepted =
+    [
+      'ASSIGNED',
+      'MECHANIC_EN_ROUTE',
+      'ARRIVED',
+      'IN_PROGRESS',
+      'PAYMENT_PENDING',
+    ].includes(status);
 
   return (
     <View style={styles.container}>
+
+      <View style={styles.header}>
+
+        <TouchableOpacity
+          style={styles.headerBack}
+          onPress={() => router.back()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={21}
+            color={colors.text}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.headerInfo}>
+
+          <Text style={styles.headerTitle}>
+            {isInProgress
+              ? 'Service in Progress'
+              : isPaymentPending
+                ? 'Service Completed'
+                : 'Mechanic Service'}
+          </Text>
+
+          <Text style={styles.headerSubtitle}>
+            {vehicleNumber}
+          </Text>
+
+        </View>
+
+        <View style={styles.statusBadge}>
+
+          <View style={styles.statusDot} />
+
+          <Text style={styles.statusText}>
+            {status || 'ACTIVE'}
+          </Text>
+
+        </View>
+
+      </View>
+
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+
+        <View style={styles.hero}>
+
+          <View style={styles.heroIcon}>
+
             <Ionicons
-              name="arrow-back"
-              size={20}
-              color={colors.text}
+              name={
+                isInProgress
+                  ? 'construct'
+                  : isPaymentPending
+                    ? 'checkmark'
+                    : 'build-outline'
+              }
+              size={34}
+              color={colors.white}
             />
-          </TouchableOpacity>
 
-          <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>
-              Service
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              Battery Issue
-            </Text>
           </View>
 
-          <View style={styles.workingBadge}>
-            <View style={styles.workingDot} />
-            <Text style={styles.workingText}>
-              WORKING
-            </Text>
-          </View>
+          <Text style={styles.heroTitle}>
+            {isInProgress
+              ? 'Service in progress'
+              : isPaymentPending
+                ? 'Service completed'
+                : 'Ready to service'}
+          </Text>
+
+          <Text style={styles.heroText}>
+            {isInProgress
+              ? `${mechanicName} is working on ${driverName}'s vehicle.`
+              : isPaymentPending
+                ? 'Waiting for the driver to complete payment.'
+                : 'Confirm the service before starting work.'}
+          </Text>
+
         </View>
 
-        {/* Progress */}
-        <View style={styles.progressCard}>
-          <View style={styles.progressHeader}>
-            <View style={styles.progressIcon}>
-              <Ionicons
-                name="construct-outline"
-                size={22}
-                color={colors.accent}
-              />
-            </View>
-
-            <View style={styles.progressInfo}>
-              <Text style={styles.progressTitle}>
-                Service in progress
-              </Text>
-              <Text style={styles.progressSubtitle}>
-                Working on the vehicle
-              </Text>
-            </View>
-
-            <Text style={styles.percent}>
-              75%
-            </Text>
-          </View>
-
-          <View style={styles.track}>
-            <View style={styles.fill} />
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>
-          Vehicle details
-        </Text>
-
-        <View style={styles.card}>
-          <View style={styles.vehicleIcon}>
-            <Ionicons
-              name="car-sport-outline"
-              size={24}
-              color={colors.accent}
-            />
-          </View>
-
-          <View style={styles.vehicleInfo}>
-            <Text style={styles.vehicleName}>
-              Hyundai i20
-            </Text>
-
-            <Text style={styles.vehicleNumber}>
-              TN 38 AB 4521
-            </Text>
-          </View>
-
-          <View style={styles.serviceBadge}>
-            <Text style={styles.serviceBadgeText}>
-              BATTERY
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>
-          Service checklist
-        </Text>
-
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.checkRow}
-            onPress={() => setResolved(!resolved)}
-            activeOpacity={0.8}
-          >
-            <View
-              style={[
-                styles.checkbox,
-                resolved && styles.checkboxActive,
-              ]}
-            >
-              {resolved && (
-                <Ionicons
-                  name="checkmark"
-                  size={16}
-                  color={colors.white}
-                />
-              )}
-            </View>
-
-            <View style={styles.checkContent}>
-              <Text style={styles.checkTitle}>
-                Battery issue resolved
-              </Text>
-
-              <Text style={styles.checkSubtitle}>
-                Confirm the vehicle starts normally
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <View style={styles.checkRow}>
-            <View style={styles.pendingCircle}>
-              <Ionicons
-                name="ellipse-outline"
-                size={19}
-                color={colors.textLight}
-              />
-            </View>
-
-            <View style={styles.checkContent}>
-              <Text style={styles.checkTitleMuted}>
-                Vehicle condition checked
-              </Text>
-
-              <Text style={styles.checkSubtitle}>
-                Confirm the vehicle is safe to drive
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>
-          Service notes
-        </Text>
-
-        <View style={styles.notesCard}>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Add service notes..."
-            placeholderTextColor={colors.textLight}
-            multiline
-            textAlignVertical="top"
-            style={styles.notesInput}
-          />
-        </View>
 
         <View style={styles.driverCard}>
-          <View style={styles.driverIcon}>
+
+          <View style={styles.avatar}>
             <Ionicons
-              name="person-outline"
-              size={19}
+              name="person"
+              size={27}
               color={colors.accent}
             />
           </View>
 
           <View style={styles.driverInfo}>
-            <Text style={styles.driverLabel}>
-              Driver
-            </Text>
+
             <Text style={styles.driverName}>
-              Rajesh Kumar
+              {driverName}
             </Text>
+
+            <Text style={styles.driverSubtitle}>
+              {vehicleName} • {vehicleNumber}
+            </Text>
+
+            <View style={styles.ratingRow}>
+
+              <Ionicons
+                name="star"
+                size={13}
+                color={colors.warning}
+              />
+
+              <Text style={styles.rating}>
+                {rating}
+              </Text>
+
+              <Text style={styles.jobs}>
+                • {jobs} jobs
+              </Text>
+
+            </View>
+
           </View>
 
-          <TouchableOpacity style={styles.callButton}>
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={handleCallDriver}
+            disabled={!driverPhone}
+          >
             <Ionicons
-              name="call-outline"
+              name="call"
               size={18}
-              color={colors.success}
+              color={colors.white}
             />
           </TouchableOpacity>
+
         </View>
+
+
+        <Text style={styles.sectionLabel}>
+          CURRENT SERVICE
+        </Text>
+
+        <View style={styles.serviceCard}>
+
+          <View style={styles.serviceIcon}>
+
+            <Ionicons
+              name={
+                category === 'BATTERY'
+                  ? 'battery-half-outline'
+                  : category === 'TYRE'
+                    ? 'disc-outline'
+                    : category === 'FUEL'
+                      ? 'flame-outline'
+                      : 'construct-outline'
+              }
+              size={24}
+              color={colors.serviceBattery}
+            />
+
+          </View>
+
+          <View style={styles.serviceInfo}>
+
+            <Text style={styles.serviceTitle}>
+              {serviceName}
+            </Text>
+
+            <Text style={styles.serviceDescription}>
+              {serviceDescription}
+            </Text>
+
+            <View style={styles.statusChip}>
+
+              <View style={styles.statusChipDot} />
+
+              <Text style={styles.statusChipText}>
+                {isInProgress
+                  ? 'IN PROGRESS'
+                  : isPaymentPending
+                    ? 'PAYMENT PENDING'
+                    : 'MECHANIC ARRIVED'}
+              </Text>
+
+            </View>
+
+          </View>
+
+        </View>
+
+
+        <Text style={styles.sectionLabel}>
+          VEHICLE DETAILS
+        </Text>
+
+        <View style={styles.vehicleCard}>
+
+          <Ionicons
+            name="car-outline"
+            size={26}
+            color={colors.accent}
+          />
+
+          <View style={styles.vehicleInfo}>
+
+            <Text style={styles.vehicleNumber}>
+              {vehicleNumber}
+            </Text>
+
+            <Text style={styles.vehicleModel}>
+              {vehicleName}
+            </Text>
+
+          </View>
+
+        </View>
+
+
+        <Text style={styles.sectionLabel}>
+          SERVICE CHECKLIST
+        </Text>
+
+        <View style={styles.checklistCard}>
+
+          <ChecklistRow
+            checked={isInProgress || isPaymentPending}
+            title="Battery issue resolved"
+            subtitle="Confirm the vehicle starts normally"
+          />
+
+          <View style={styles.divider} />
+
+          <ChecklistRow
+            checked={isPaymentPending}
+            title="Vehicle condition checked"
+            subtitle="Confirm the vehicle is safe to drive"
+          />
+
+        </View>
+
+
+        <Text style={styles.sectionLabel}>
+          SERVICE NOTES
+        </Text>
+
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          placeholder="Add service notes..."
+          placeholderTextColor={colors.textMuted}
+          style={styles.notes}
+        />
+
+
+        <View style={styles.liveCard}>
+
+          <Ionicons
+            name="sync-outline"
+            size={20}
+            color={colors.accent}
+          />
+
+          <View style={styles.liveInfo}>
+
+            <Text style={styles.liveTitle}>
+              Live backend status
+            </Text>
+
+            <Text style={styles.liveText}>
+              {status}. The driver app reads the same
+              backend status automatically.
+            </Text>
+
+          </View>
+
+        </View>
+
       </ScrollView>
 
+
       <View style={styles.bottomBar}>
-        <View style={styles.amountBox}>
-          <Text style={styles.amountLabel}>
-            Service amount
-          </Text>
-          <Text style={styles.amount}>
-            ₹450
-          </Text>
-        </View>
 
-        <TouchableOpacity
-          style={[
-            styles.completeButton,
-            !resolved && styles.disabledButton,
-          ]}
-          disabled={!resolved}
-          onPress={completeService}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.completeText,
-              !resolved && styles.disabledText,
-            ]}
-          >
-            COMPLETE SERVICE
-          </Text>
+        {isArrived && (
 
-          <View
-            style={[
-              styles.arrowBox,
-              !resolved && styles.disabledArrow,
-            ]}
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleStartService}
+            disabled={updating}
+            activeOpacity={0.85}
           >
+
+            {updating ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.white}
+              />
+            ) : (
+              <Ionicons
+                name="construct-outline"
+                size={20}
+                color={colors.white}
+              />
+            )}
+
+            <Text style={styles.primaryText}>
+              {updating
+                ? 'STARTING...'
+                : 'START SERVICE'}
+            </Text>
+
+          </TouchableOpacity>
+
+        )}
+
+        {isInProgress && (
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleCompleteService}
+            disabled={updating}
+            activeOpacity={0.85}
+          >
+
+            {updating ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.white}
+              />
+            ) : (
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={20}
+                color={colors.white}
+              />
+            )}
+
+            <Text style={styles.primaryText}>
+              {updating
+                ? 'COMPLETING...'
+                : 'COMPLETE SERVICE'}
+            </Text>
+
+          </TouchableOpacity>
+
+        )}
+
+        {isPaymentPending && (
+
+          <View style={styles.pendingBar}>
+
             <Ionicons
-              name="arrow-forward"
-              size={18}
-              color={
-                resolved
-                  ? colors.white
-                  : colors.textLight
-              }
+              name="card-outline"
+              size={21}
+              color={colors.accent}
             />
+
+            <Text style={styles.pendingText}>
+              Waiting for driver payment
+            </Text>
+
           </View>
-        </TouchableOpacity>
+
+        )}
+
+        {!accepted && (
+
+          <View style={styles.pendingBar}>
+
+            <Ionicons
+              name="information-circle-outline"
+              size={21}
+              color={colors.accent}
+            />
+
+            <Text style={styles.pendingText}>
+              Waiting for request assignment
+            </Text>
+
+          </View>
+
+        )}
+
       </View>
+
+    </View>
+  );
+}
+
+function ChecklistRow({
+  checked,
+  title,
+  subtitle,
+}) {
+
+  return (
+    <View style={styles.checkRow}>
+
+      <View
+        style={[
+          styles.checkBox,
+          checked &&
+            styles.checkBoxChecked,
+        ]}
+      >
+
+        {checked && (
+          <Ionicons
+            name="checkmark"
+            size={14}
+            color={colors.white}
+          />
+        )}
+
+      </View>
+
+      <View style={styles.checkInfo}>
+
+        <Text style={styles.checkTitle}>
+          {title}
+        </Text>
+
+        <Text style={styles.checkSubtitle}>
+          {subtitle}
+        </Text>
+
+      </View>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
 
-  content: {
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingTop: 18,
-    paddingBottom: 110,
+  center: {
+    flex: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontFamily: 'InterMedium',
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+
+  errorTitle: {
+    marginTop: 12,
+    fontFamily: 'InterBold',
+    fontSize: 17,
+    color: colors.text,
+  },
+
+  backButtonLarge: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 13,
+    backgroundColor: colors.accent,
+  },
+
+  backButtonText: {
+    fontFamily: 'InterBold',
+    fontSize: 10,
+    color: colors.white,
   },
 
   header: {
+    minHeight: 76,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 18,
   },
 
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: colors.white,
+  headerBack: {
+    width: 43,
+    height: 43,
+    borderRadius: 14,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 11,
   },
 
-  headerText: {
+  headerInfo: {
     flex: 1,
-    marginLeft: 11,
   },
 
   headerTitle: {
     fontFamily: 'InterBold',
-    fontSize: 18,
+    fontSize: 17,
     color: colors.text,
   },
 
@@ -323,180 +898,263 @@ const styles = StyleSheet.create({
     fontFamily: 'InterRegular',
     fontSize: 10,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
   },
 
-  workingBadge: {
+  statusBadge: {
+    backgroundColor: colors.accentLight,
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.warningLight,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: spacing.radiusRound,
+    gap: 5,
   },
 
-  workingDot: {
+  statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.warning,
-    marginRight: 5,
+    backgroundColor: colors.accent,
   },
 
-  workingText: {
+  statusText: {
     fontFamily: 'InterBold',
     fontSize: 8,
-    color: '#B45309',
+    color: colors.accent,
   },
 
-  progressCard: {
+  content: {
+    padding: 20,
+    paddingBottom: 130,
+  },
+
+  hero: {
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 22,
+  },
+
+  heroIcon: {
+    width: 78,
+    height: 78,
+    borderRadius: 27,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  heroTitle: {
+    fontFamily: 'InterBold',
+    fontSize: 24,
+    color: colors.text,
+    marginTop: 15,
+  },
+
+  heroText: {
+    fontFamily: 'InterRegular',
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+
+  driverCard: {
     backgroundColor: colors.white,
-    borderRadius: spacing.radiusLarge,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: colors.borderLight,
-    padding: spacing.cardPadding,
-  },
-
-  progressHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  progressIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 17,
     backgroundColor: colors.accentLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 11,
   },
 
-  progressInfo: {
+  driverInfo: {
     flex: 1,
   },
 
-  progressTitle: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
-    color: colors.text,
-  },
-
-  progressSubtitle: {
-    fontFamily: 'InterRegular',
-    fontSize: 9,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-
-  percent: {
+  driverName: {
     fontFamily: 'InterBold',
     fontSize: 14,
-    color: colors.accent,
-  },
-
-  track: {
-    height: 7,
-    backgroundColor: colors.borderLight,
-    borderRadius: 99,
-    overflow: 'hidden',
-    marginTop: 14,
-  },
-
-  fill: {
-    width: '75%',
-    height: '100%',
-    backgroundColor: colors.accent,
-    borderRadius: 99,
-  },
-
-  sectionTitle: {
-    fontFamily: 'InterBold',
-    fontSize: 15,
-    color: colors.text,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: spacing.radiusLarge,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: spacing.cardPadding,
-  },
-
-  vehicleIcon: {
-    width: 45,
-    height: 45,
-    borderRadius: 14,
-    backgroundColor: colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-
-  vehicleInfo: {
-    flex: 1,
-  },
-
-  vehicleName: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 12,
     color: colors.text,
   },
 
-  vehicleNumber: {
+  driverSubtitle: {
     fontFamily: 'InterRegular',
-    fontSize: 9,
+    fontSize: 10,
     color: colors.textMuted,
     marginTop: 3,
   },
 
-  serviceBadge: {
-    backgroundColor: colors.warningLight,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 99,
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 5,
   },
 
-  serviceBadgeText: {
+  rating: {
     fontFamily: 'InterBold',
-    fontSize: 7,
-    color: '#B45309',
+    fontSize: 10,
+    color: colors.text,
   },
 
-  checkRow: {
-    minHeight: 62,
+  jobs: {
+    fontFamily: 'InterRegular',
+    fontSize: 9,
+    color: colors.textMuted,
+  },
+
+  callButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  sectionLabel: {
+    fontFamily: 'InterBold',
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+    marginTop: 22,
+    marginBottom: 9,
+  },
+
+  serviceCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    flexDirection: 'row',
+  },
+
+  serviceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: colors.warningLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+
+  serviceInfo: {
+    flex: 1,
+  },
+
+  serviceTitle: {
+    fontFamily: 'InterBold',
+    fontSize: 13,
+    color: colors.text,
+  },
+
+  serviceDescription: {
+    fontFamily: 'InterRegular',
+    fontSize: 10,
+    lineHeight: 15,
+    color: colors.textSecondary,
+    marginTop: 3,
+  },
+
+  statusChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accentLight,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+
+  statusChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+
+  statusChipText: {
+    fontFamily: 'InterBold',
+    fontSize: 8,
+    color: colors.accent,
+  },
+
+  vehicleCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
   },
 
-  checkbox: {
-    width: 25,
-    height: 25,
+  vehicleInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  vehicleNumber: {
+    fontFamily: 'InterBold',
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  vehicleModel: {
+    fontFamily: 'InterRegular',
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: 3,
+  },
+
+  checklistCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+
+  checkBox: {
+    width: 27,
+    height: 27,
     borderRadius: 8,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 11,
   },
 
-  checkboxActive: {
+  checkBoxChecked: {
     backgroundColor: colors.success,
     borderColor: colors.success,
   },
 
-  pendingCircle: {
-    width: 25,
-    height: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 11,
-  },
-
-  checkContent: {
+  checkInfo: {
     flex: 1,
   },
 
@@ -506,17 +1164,11 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  checkTitleMuted: {
-    fontFamily: 'InterSemiBold',
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-
   checkSubtitle: {
     fontFamily: 'InterRegular',
     fontSize: 9,
     color: colors.textMuted,
-    marginTop: 3,
+    marginTop: 2,
   },
 
   divider: {
@@ -524,136 +1176,83 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
   },
 
-  notesCard: {
+  notes: {
+    minHeight: 110,
+    borderRadius: 16,
     backgroundColor: colors.white,
-    borderRadius: spacing.radiusMedium,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    padding: 12,
-  },
-
-  notesInput: {
-    minHeight: 85,
-    fontFamily: 'InterRegular',
-    fontSize: 11,
-    lineHeight: 17,
-    color: colors.text,
-  },
-
-  driverCard: {
-    marginTop: 18,
-    backgroundColor: colors.white,
-    borderRadius: spacing.radiusMedium,
     borderWidth: 1,
     borderColor: colors.borderLight,
     padding: 13,
+    textAlignVertical: 'top',
+    fontFamily: 'InterRegular',
+    fontSize: 11,
+    color: colors.text,
+  },
+
+  liveCard: {
+    marginTop: 16,
+    backgroundColor: colors.infoLight,
+    borderRadius: 15,
+    padding: 13,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 9,
   },
 
-  driverIcon: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
-    backgroundColor: colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 9,
-  },
-
-  driverInfo: {
+  liveInfo: {
     flex: 1,
   },
 
-  driverLabel: {
-    fontFamily: 'InterRegular',
-    fontSize: 8,
-    color: colors.textMuted,
-  },
-
-  driverName: {
-    fontFamily: 'InterSemiBold',
+  liveTitle: {
+    fontFamily: 'InterBold',
     fontSize: 11,
     color: colors.text,
+  },
+
+  liveText: {
+    fontFamily: 'InterRegular',
+    fontSize: 9,
+    lineHeight: 14,
+    color: colors.textSecondary,
     marginTop: 2,
   },
 
-  callButton: {
-    width: 39,
-    height: 39,
-    borderRadius: 12,
-    backgroundColor: colors.successLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   bottomBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    padding: 12,
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    paddingHorizontal: spacing.screenHorizontal,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
 
-  amountBox: {
-    width: 95,
-  },
-
-  amountLabel: {
-    fontFamily: 'InterRegular',
-    fontSize: 8,
-    color: colors.textMuted,
-  },
-
-  amount: {
-    fontFamily: 'InterBold',
-    fontSize: 18,
-    color: colors.text,
-    marginTop: 1,
-  },
-
-  completeButton: {
-    flex: 1,
-    height: spacing.buttonHeight,
+  primaryButton: {
+    height: 54,
     borderRadius: 15,
     backgroundColor: colors.accent,
-    paddingLeft: 15,
-    paddingRight: 7,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
   },
 
-  disabledButton: {
-    backgroundColor: colors.borderLight,
-  },
-
-  completeText: {
-    flex: 1,
+  primaryText: {
     fontFamily: 'InterBold',
-    fontSize: 10,
+    fontSize: 11,
     color: colors.white,
   },
 
-  disabledText: {
-    color: colors.textLight,
-  },
-
-  arrowBox: {
-    width: 39,
-    height: 39,
-    borderRadius: 11,
-    backgroundColor: colors.accentDark,
+  pendingBar: {
+    minHeight: 54,
+    borderRadius: 15,
+    backgroundColor: colors.infoLight,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 9,
   },
 
-  disabledArrow: {
-    backgroundColor: colors.border,
+  pendingText: {
+    fontFamily: 'InterSemiBold',
+    fontSize: 11,
+    color: colors.textSecondary,
   },
 });
