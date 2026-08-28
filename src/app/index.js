@@ -713,6 +713,20 @@ export default function MechanicHome() {
     };
 
   // =======================================================
+  // PERFORMANCE VALUES
+  // =======================================================
+
+  const totalJobs =
+    mechanic?.totalJobs ??
+    0;
+
+  const rating =
+    mechanic?.rating !== null &&
+    mechanic?.rating !== undefined
+      ? Number(mechanic.rating).toFixed(1)
+      : '0.0';
+
+  // =======================================================
   // LOADING
   // =======================================================
 
@@ -1219,62 +1233,149 @@ export default function MechanicHome() {
 
           <View
             style={
-              styles.performanceIcon
+              styles.performanceHeader
             }
           >
-            <Ionicons
-              name="star-outline"
-              size={27}
-              color={colors.white}
-            />
+
+            <View>
+              <Text
+                style={
+                  styles.performanceTitle
+                }
+              >
+                Your Performance
+              </Text>
+
+              <Text
+                style={
+                  styles.performanceSubtitle
+                }
+              >
+                Your service activity at a glance
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={
+                styles.statsButton
+              }
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push('/earnings')
+              }
+            >
+              <Ionicons
+                name="bar-chart-outline"
+                size={16}
+                color={colors.white}
+              />
+
+              <Text
+                style={
+                  styles.statsButtonText
+                }
+              >
+                Stats
+              </Text>
+            </TouchableOpacity>
+
           </View>
 
           <View
             style={
-              styles.performanceContent
+              styles.performanceDivider
             }
-          >
-            <Text
-              style={
-                styles.performanceTitle
-              }
-            >
-              Great work!
-            </Text>
+          />
 
-            <Text
-              style={
-                styles.performanceText
-              }
-            >
-              Keep helping drivers and build a strong
-              service reputation.
-            </Text>
-          </View>
-
-          <TouchableOpacity
+          <View
             style={
-              styles.statsButton
-            }
-            activeOpacity={0.8}
-            onPress={() =>
-              router.push('/earnings')
+              styles.performanceMetrics
             }
           >
-            <Ionicons
-              name="bar-chart-outline"
-              size={17}
-              color={colors.white}
-            />
 
-            <Text
+            {/* RATING */}
+
+            <View
               style={
-                styles.statsButtonText
+                styles.performanceMetric
               }
             >
-              Stats
-            </Text>
-          </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.performanceMetricIcon,
+                  styles.ratingIcon,
+                ]}
+              >
+                <Ionicons
+                  name="star"
+                  size={18}
+                  color={colors.accent}
+                />
+              </View>
+
+              <View>
+                <Text
+                  style={
+                    styles.performanceMetricValue
+                  }
+                >
+                  {rating}
+                </Text>
+
+                <Text
+                  style={
+                    styles.performanceMetricLabel
+                  }
+                >
+                  Rating
+                </Text>
+              </View>
+
+            </View>
+
+            {/* JOBS */}
+
+            <View
+              style={
+                styles.performanceMetric
+              }
+            >
+
+              <View
+                style={[
+                  styles.performanceMetricIcon,
+                  styles.jobsIcon,
+                ]}
+              >
+                <Ionicons
+                  name="construct-outline"
+                  size={18}
+                  color={colors.success}
+                />
+              </View>
+
+              <View>
+                <Text
+                  style={
+                    styles.performanceMetricValue
+                  }
+                >
+                  {totalJobs}
+                </Text>
+
+                <Text
+                  style={
+                    styles.performanceMetricLabel
+                  }
+                >
+                  Jobs Completed
+                </Text>
+              </View>
+
+            </View>
+
+          </View>
 
         </View>
 
@@ -2226,45 +2327,89 @@ const styles =
 
     performanceCard: {
       marginTop: 16,
-      minHeight: 96,
+      minHeight: 116,
       borderRadius: 18,
       backgroundColor: colors.accent,
-      padding: 13,
+      padding: 14,
+    },
+
+    performanceHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-    },
-
-    performanceIcon: {
-      width: 45,
-      height: 45,
-      borderRadius: 14,
-      backgroundColor:
-        'rgba(255,255,255,0.14)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-
-    performanceContent: {
-      flex: 1,
-      marginLeft: 10,
-      paddingRight: 6,
+      justifyContent: 'space-between',
     },
 
     performanceTitle: {
       fontFamily:
         'InterBold',
       fontSize: 14,
-      color: colors.white,
+      color:
+        colors.white,
     },
 
-    performanceText: {
+    performanceSubtitle: {
       fontFamily:
         'InterRegular',
       fontSize: 8.5,
-      lineHeight: 13,
       color:
-        'rgba(255,255,255,0.82)',
+        'rgba(255,255,255,0.78)',
       marginTop: 3,
+    },
+
+    performanceDivider: {
+      height: 1,
+      backgroundColor:
+        'rgba(255,255,255,0.16)',
+      marginVertical: 12,
+    },
+
+    performanceMetrics: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    performanceMetric: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    performanceMetricIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 9,
+      backgroundColor:
+        colors.white,
+    },
+
+    ratingIcon: {
+      backgroundColor:
+        colors.white,
+    },
+
+    jobsIcon: {
+      backgroundColor:
+        colors.white,
+    },
+
+    performanceMetricValue: {
+      fontFamily:
+        'InterBold',
+      fontSize: 17,
+      color:
+        colors.white,
+    },
+
+    performanceMetricLabel: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 8,
+      color:
+        'rgba(255,255,255,0.78)',
+      marginTop: 1,
     },
 
     statsButton: {
@@ -2283,7 +2428,8 @@ const styles =
       fontFamily:
         'InterSemiBold',
       fontSize: 8.5,
-      color: colors.white,
+      color:
+        colors.white,
     },
 
     errorText: {
