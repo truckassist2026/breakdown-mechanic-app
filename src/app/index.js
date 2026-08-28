@@ -20,6 +20,8 @@ import { useRouter } from 'expo-router';
 
 import BottomNavigation from '../components/BottomNavigation';
 
+import { navigateToMechanicRequest } from '../utils/mechanicRequestNavigation';
+
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
@@ -701,15 +703,10 @@ export default function MechanicHome() {
 
   const openRequest =
     request => {
-      router.push({
-        pathname:
-          '/request-details',
-
-        params: {
-          requestId:
-            request.id,
-        },
-      });
+      navigateToMechanicRequest(
+        router,
+        request
+      );
     };
 
   // =======================================================

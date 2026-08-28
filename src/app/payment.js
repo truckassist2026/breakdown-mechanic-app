@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import BottomNavigation from '../components/BottomNavigation';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Alert } from 'react-native';
 
@@ -448,6 +449,8 @@ export default function PaymentScreen() {
 
       </View>
 
+      <BottomNavigation />
+
     </View>
   );
 }
@@ -498,7 +501,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontal,
     paddingTop: 24,
-    paddingBottom: 110,
+    paddingBottom: 190,
   },
 
   header: {
@@ -739,7 +742,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 76,
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,

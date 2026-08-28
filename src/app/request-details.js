@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +32,11 @@ import {
   acceptMechanicRequest,
   getMechanicRequestById,
 } from '../services/mechanicApi';
+
+import {
+  getMechanicRequestRoute,
+  normalizeMechanicRequestStatus,
+} from '../utils/mechanicRequestNavigation';
 
 import BottomNavigation from '../components/BottomNavigation';
 
@@ -633,6 +639,67 @@ export default function RequestDetailsScreen() {
 
         if (mounted) {
 
+            // =================================================
+          // RESUME ACTIVE WORKFLOW FROM BACKEND STATUS
+          // =================================================
+
+          const normalizedStatus =
+            normalizeMechanicRequestStatus(
+              requestData?.status
+            );
+
+          const resumeRoute =
+            getMechanicRequestRoute(
+              normalizedStatus
+            );
+
+          const shouldResume =
+            [
+              'ACCEPTED',
+              'ASSIGNED',
+              'MECHANIC_EN_ROUTE',
+              'ARRIVED',
+              'IN_PROGRESS',
+              'PAYMENT_PENDING',
+            ].includes(
+              normalizedStatus
+            );
+
+          if (
+            mounted &&
+            shouldResume
+          ) {
+            console.log(
+              '[MECHANIC REQUEST DETAILS] Resuming workflow:',
+              {
+                requestId:
+                  requestData?.id,
+                status:
+                  normalizedStatus,
+                route:
+                  resumeRoute,
+              }
+            );
+
+            setLoading(
+              false
+            );
+
+            router.replace({
+              pathname:
+                resumeRoute,
+
+              params: {
+                requestId:
+                  String(
+                    requestData.id
+                  ),
+              },
+            });
+
+            return;
+          }
+
           setRequest(
             requestData
           );
@@ -1204,8 +1271,9 @@ export default function RequestDetailsScreen() {
 
 
   const status =
-    request.status ||
-    'SEARCHING';
+      normalizeMechanicRequestStatus(
+        request.status
+      );
 
 
   // =======================================================
@@ -1970,11 +2038,17 @@ export default function RequestDetailsScreen() {
           BOTTOM ACTION
       ================================================= */}
 
-      <View
-        style={
-          styles.bottomBar
-        }
-      >
+      {[
+        'CREATED',
+        'PENDING',
+        'REQUESTED',
+        'SEARCHING',
+      ].includes(status) && (
+        <View
+          style={
+            styles.bottomBar
+          }
+        >
 
         <TouchableOpacity
           style={[
@@ -2027,7 +2101,8 @@ export default function RequestDetailsScreen() {
 
         </TouchableOpacity>
 
-      </View>
+        </View>
+      )}
 
       <BottomNavigation
         active="requests"

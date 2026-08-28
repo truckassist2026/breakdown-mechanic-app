@@ -20,6 +20,8 @@ import {
   Ionicons,
 } from '@expo/vector-icons';
 
+import BottomNavigation from '../components/BottomNavigation';
+
 import {
   useLocalSearchParams,
   useRouter,
@@ -69,6 +71,21 @@ export default function ServiceScreen() {
     notes,
     setNotes,
   ] = useState('');
+
+  const [
+    checklist,
+    setChecklist,
+  ] = useState({});
+
+  const toggleChecklistItem =
+    (key) => {
+      setChecklist(
+        current => ({
+          ...current,
+          [key]: !current[key],
+        })
+      );
+    };
 
 
   // =======================================================
@@ -213,6 +230,48 @@ export default function ServiceScreen() {
   const serviceDescription =
     request?.description ||
     'Working on the vehicle.';
+  const checklistItems = {
+    TYRE: [
+      ['tyre_issue_checked', 'Tyre issue inspected', 'Confirm the tyre problem was checked'],
+      ['tyre_repaired_replaced', 'Tyre repaired / replaced', 'Confirm the required tyre work was completed'],
+      ['tyre_pressure_checked', 'Tyre pressure checked', 'Confirm the tyre is inflated correctly'],
+    ],
+    BATTERY: [
+      ['battery_tested', 'Battery tested', 'Confirm battery condition was checked'],
+      ['battery_terminals_checked', 'Battery terminals checked', 'Confirm terminals and connections were checked'],
+      ['battery_service_completed', 'Battery service completed', 'Confirm the required battery work was completed'],
+    ],
+    FUEL: [
+      ['fuel_delivered', 'Fuel delivered', 'Confirm the requested fuel was delivered'],
+      ['fuel_system_checked', 'Fuel system checked', 'Confirm the vehicle fuel system was checked'],
+      ['vehicle_started', 'Vehicle started', 'Confirm the vehicle starts normally'],
+    ],
+    BREAKDOWN: [
+      ['issue_diagnosed', 'Issue diagnosed', 'Confirm the breakdown issue was identified'],
+      ['repair_completed', 'Repair completed', 'Confirm the required repair was completed'],
+      ['vehicle_tested', 'Vehicle tested', 'Confirm the vehicle was tested after repair'],
+    ],
+    ELECTRICAL: [
+      ['electrical_issue_diagnosed', 'Electrical issue diagnosed', 'Confirm the electrical issue was identified'],
+      ['wiring_checked', 'Wiring and connections checked', 'Confirm wiring and electrical connections were checked'],
+      ['electrical_function_tested', 'Electrical function tested', 'Confirm the affected function works correctly'],
+    ],
+    OTHER: [
+      ['service_performed', 'Service performed', 'Confirm the requested assistance was completed'],
+      ['vehicle_checked', 'Vehicle checked', 'Confirm the vehicle was checked after service'],
+      ['service_completed', 'Service completed', 'Confirm the service is ready to be closed'],
+    ],
+  };
+
+  const currentChecklist =
+    checklistItems[category] ||
+    checklistItems.OTHER;
+
+  const allChecklistCompleted =
+    currentChecklist.every(
+      ([key]) => checklist[key]
+    );
+
 
 
   const vehicleName =
@@ -372,6 +431,16 @@ export default function ServiceScreen() {
 
   const handleCompleteService =
     async () => {
+
+      if (!allChecklistCompleted) {
+        Alert.alert(
+          'Complete checklist',
+          'Please complete all service checklist items before completing the service.'
+        );
+
+        return;
+      }
+
 
       if (
         status !==
@@ -1077,32 +1146,74 @@ export default function ServiceScreen() {
           }
         >
 
-          <ChecklistRow
-            checked={
-              isInProgress ||
-              isPaymentPending ||
-              isCompleted
-            }
-            title="Service work completed"
-            subtitle="Confirm the requested issue has been addressed"
-          />
+          {currentChecklist.map(
+            ([key, title, subtitle], index) => (
+              <View key={key}>
 
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={
+                    styles.checklistRow
+                  }
+                  onPress={() =>
+                    toggleChecklistItem(
+                      key
+                    )
+                  }
+                >
 
-          <View
-            style={
-              styles.divider
-            }
-          />
+                  <View
+                    style={[
+                      styles.checklistCheckbox,
+                      checklist[key] &&
+                        styles.checklistCheckboxChecked,
+                    ]}
+                  >
+                    {checklist[key] && (
+                      <Ionicons
+                        name="checkmark"
+                        size={16}
+                        color={colors.white}
+                      />
+                    )}
+                  </View>
 
+                  <View
+                    style={
+                      styles.checklistContent
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.checklistTitle
+                      }
+                    >
+                      {title}
+                    </Text>
 
-          <ChecklistRow
-            checked={
-              isPaymentPending ||
-              isCompleted
-            }
-            title="Vehicle condition checked"
-            subtitle="Confirm the vehicle is safe to drive"
-          />
+                    <Text
+                      style={
+                        styles.checklistSubtitle
+                      }
+                    >
+                      {subtitle}
+                    </Text>
+                  </View>
+
+                </TouchableOpacity>
+
+                {index <
+                  currentChecklist.length - 1 && (
+                  <View
+                    style={
+                      styles.divider
+                    }
+                  />
+                )}
+
+              </View>
+            )
+          )}
 
         </View>
 
@@ -1410,6 +1521,8 @@ export default function ServiceScreen() {
 
       </View>
 
+      <BottomNavigation />
+
     </View>
   );
 }
@@ -1647,7 +1760,7 @@ const styles =
 
     content: {
       padding: 20,
-      paddingBottom: 130,
+      paddingBottom: 190,
     },
 
 
@@ -1927,7 +2040,48 @@ const styles =
     },
 
 
-    checklistCard: {
+    checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+
+  checklistCheckbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: colors.white,
+  },
+
+  checklistCheckboxChecked: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+
+  checklistContent: {
+    flex: 1,
+  },
+
+  checklistTitle: {
+    fontFamily: 'InterSemiBold',
+    fontSize: 14,
+    color: colors.text,
+  },
+
+  checklistSubtitle: {
+    fontFamily: 'InterRegular',
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 3,
+    lineHeight: 16,
+  },
+
+  checklistCard: {
       backgroundColor:
         colors.white,
       borderRadius: 18,
@@ -2068,6 +2222,7 @@ const styles =
       borderTopWidth: 1,
       borderTopColor:
         colors.borderLight,
+      marginBottom: 76,
     },
 
 

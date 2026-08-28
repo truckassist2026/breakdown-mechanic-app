@@ -550,7 +550,8 @@ export default function ActiveScreen() {
       // ---------------------------------------------------
 
       if (
-        status === 'ASSIGNED'
+        status === 'ASSIGNED' ||
+        status === 'ACCEPTED'
       ) {
 
         handleStatusUpdate(
@@ -802,8 +803,8 @@ export default function ActiveScreen() {
 
 
   const isAssigned =
-    status ===
-    'ASSIGNED';
+    status === 'ASSIGNED' ||
+    status === 'ACCEPTED';
 
 
   const isInProgress =
