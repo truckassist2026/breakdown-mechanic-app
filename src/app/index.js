@@ -20,8 +20,6 @@ import { useRouter } from 'expo-router';
 
 import BottomNavigation from '../components/BottomNavigation';
 
-import { navigateToMechanicRequest } from '../utils/mechanicRequestNavigation';
-
 import colors from '../constants/colors';
 import spacing from '../constants/spacing';
 
@@ -703,10 +701,15 @@ export default function MechanicHome() {
 
   const openRequest =
     request => {
-      navigateToMechanicRequest(
-        router,
-        request
-      );
+      router.push({
+        pathname:
+          '/request-details',
+
+        params: {
+          requestId:
+            request.id,
+        },
+      });
     };
 
   // =======================================================
@@ -1173,6 +1176,7 @@ export default function MechanicHome() {
           <QuickAction
             icon="time-outline"
             title="Job history"
+            subtitle="View past jobs"
             onPress={() =>
               router.push(
                 '/history'
@@ -1183,6 +1187,7 @@ export default function MechanicHome() {
           <QuickAction
             icon="wallet-outline"
             title="My earnings"
+            subtitle="Track your income"
             onPress={() =>
               router.push(
                 '/earnings'
@@ -1193,12 +1198,84 @@ export default function MechanicHome() {
           <QuickAction
             icon="person-outline"
             title="Profile"
+            subtitle="Manage your profile"
             onPress={() =>
               router.push(
                 '/profile'
               )
             }
           />
+        </View>
+
+        {/* ================================================= */}
+        {/* PERFORMANCE */}
+        {/* ================================================= */}
+
+        <View
+          style={
+            styles.performanceCard
+          }
+        >
+
+          <View
+            style={
+              styles.performanceIcon
+            }
+          >
+            <Ionicons
+              name="star-outline"
+              size={27}
+              color={colors.white}
+            />
+          </View>
+
+          <View
+            style={
+              styles.performanceContent
+            }
+          >
+            <Text
+              style={
+                styles.performanceTitle
+              }
+            >
+              Great work!
+            </Text>
+
+            <Text
+              style={
+                styles.performanceText
+              }
+            >
+              Keep helping drivers and build a strong
+              service reputation.
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={
+              styles.statsButton
+            }
+            activeOpacity={0.8}
+            onPress={() =>
+              router.push('/earnings')
+            }
+          >
+            <Ionicons
+              name="bar-chart-outline"
+              size={17}
+              color={colors.white}
+            />
+
+            <Text
+              style={
+                styles.statsButtonText
+              }
+            >
+              Stats
+            </Text>
+          </TouchableOpacity>
+
         </View>
 
         {error && (
@@ -1440,6 +1517,7 @@ function RequestCard({
 function QuickAction({
   icon,
   title,
+  subtitle,
   onPress,
 }) {
   return (
@@ -1477,6 +1555,21 @@ function QuickAction({
       >
         {title}
       </Text>
+
+      <Text
+        style={
+          styles.quickSubtitle
+        }
+      >
+        {subtitle}
+      </Text>
+
+      <Ionicons
+        name="chevron-forward"
+        size={15}
+        color={colors.textMuted}
+        style={styles.quickArrow}
+      />
     </TouchableOpacity>
   );
 }
@@ -1514,7 +1607,7 @@ const styles =
     content: {
       paddingHorizontal:
         spacing.screenHorizontal,
-      paddingTop: 18,
+      paddingTop: 0,
       paddingBottom: 105,
     },
 
@@ -1525,6 +1618,14 @@ const styles =
         'center',
       justifyContent:
         'space-between',
+      backgroundColor:
+        colors.accent,
+      marginHorizontal:
+        -spacing.screenHorizontal,
+      paddingHorizontal:
+        spacing.screenHorizontal,
+      paddingTop: 20,
+      paddingBottom: 12,
     },
 
     brandRow: {
@@ -1550,9 +1651,9 @@ const styles =
     brandName: {
       fontFamily:
         'InterBold',
-      fontSize: 18,
+      fontSize: 20,
       color:
-        colors.text,
+        colors.white,
     },
 
     brandSubtitle: {
@@ -1560,7 +1661,7 @@ const styles =
         'InterRegular',
       fontSize: 9,
       color:
-        colors.textMuted,
+        'rgba(255,255,255,0.78)',
       marginTop: 2,
     },
 
@@ -1597,7 +1698,19 @@ const styles =
     },
 
     welcomeSection: {
-      marginTop: 28,
+      marginHorizontal:
+        -spacing.screenHorizontal,
+      marginTop: 0,
+      paddingHorizontal:
+        spacing.screenHorizontal,
+      paddingTop: 16,
+      paddingBottom: 25,
+      backgroundColor:
+        colors.accent,
+      borderBottomLeftRadius:
+        28,
+      borderBottomRightRadius:
+        28,
     },
 
     welcomeSmall: {
@@ -1605,15 +1718,15 @@ const styles =
         'InterMedium',
       fontSize: 11,
       color:
-        colors.textMuted,
+        'rgba(255,255,255,0.78)',
     },
 
     welcomeTitle: {
       fontFamily:
         'InterBold',
-      fontSize: 25,
+      fontSize: 26,
       color:
-        colors.text,
+        colors.white,
       marginTop: 5,
     },
 
@@ -1623,13 +1736,13 @@ const styles =
       fontSize: 11,
       lineHeight: 17,
       color:
-        colors.textSecondary,
+        'rgba(255,255,255,0.82)',
       marginTop: 5,
       maxWidth: 340,
     },
 
     availabilityCard: {
-      marginTop: 20,
+      marginTop: 14,
       backgroundColor:
         colors.white,
       borderRadius:
@@ -2088,10 +2201,89 @@ const styles =
     quickTitle: {
       fontFamily:
         'InterSemiBold',
-      fontSize: 9,
+      fontSize: 10,
       color:
         colors.text,
       marginTop: 8,
+    },
+
+    quickSubtitle: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 8,
+      color:
+        colors.textMuted,
+      marginTop: 3,
+      paddingRight: 12,
+    },
+
+    quickArrow: {
+      position:
+        'absolute',
+      right: 9,
+      bottom: 10,
+    },
+
+    performanceCard: {
+      marginTop: 16,
+      minHeight: 96,
+      borderRadius: 18,
+      backgroundColor: colors.accent,
+      padding: 13,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    performanceIcon: {
+      width: 45,
+      height: 45,
+      borderRadius: 14,
+      backgroundColor:
+        'rgba(255,255,255,0.14)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    performanceContent: {
+      flex: 1,
+      marginLeft: 10,
+      paddingRight: 6,
+    },
+
+    performanceTitle: {
+      fontFamily:
+        'InterBold',
+      fontSize: 14,
+      color: colors.white,
+    },
+
+    performanceText: {
+      fontFamily:
+        'InterRegular',
+      fontSize: 8.5,
+      lineHeight: 13,
+      color:
+        'rgba(255,255,255,0.82)',
+      marginTop: 3,
+    },
+
+    statsButton: {
+      height: 34,
+      borderRadius: 10,
+      backgroundColor:
+        'rgba(255,255,255,0.14)',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      paddingHorizontal: 9,
+    },
+
+    statsButtonText: {
+      fontFamily:
+        'InterSemiBold',
+      fontSize: 8.5,
+      color: colors.white,
     },
 
     errorText: {

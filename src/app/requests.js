@@ -124,6 +124,16 @@ export default function RequestsScreen() {
           distanceKm: request.distanceKm ?? request.distance,
 
           requestedAt: request.requestedAt || request.createdAt || "Just now",
+
+          // Service value / amount from backend.
+          amount:
+            request.amount ??
+            request.serviceAmount ??
+            request.estimatedAmount ??
+            request.price ??
+            request.servicePrice ??
+            request.service?.amount ??
+            null,
         }))
         .filter((request) => Boolean(request.id));
 
@@ -556,6 +566,36 @@ function RequestCard({ request, onPress }) {
       )}
 
       {/* =================================================
+          SERVICE VALUE
+      ================================================= */}
+
+      {request?.amount !== null &&
+        request?.amount !== undefined &&
+        request?.amount !== "" && (
+          <View style={styles.amountBox}>
+
+            <View style={styles.amountIcon}>
+              <Ionicons
+                name="cash-outline"
+                size={18}
+                color={colors.accent}
+              />
+            </View>
+
+            <View style={styles.amountContent}>
+              <Text style={styles.amountLabel}>
+                SERVICE VALUE
+              </Text>
+
+              <Text style={styles.amountValue}>
+                ₹{Number(request.amount).toLocaleString("en-IN")}
+              </Text>
+            </View>
+
+          </View>
+        )}
+
+      {/* =================================================
           DESCRIPTION
       ================================================= */}
 
@@ -944,6 +984,49 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     color: colors.text,
+  },
+
+  // =====================================================
+  // SERVICE VALUE
+  // =====================================================
+
+  amountBox: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.accentLight,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.accentLight,
+  },
+
+  amountIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  amountContent: {
+    marginLeft: 10,
+    flex: 1,
+  },
+
+  amountLabel: {
+    fontFamily: "InterSemiBold",
+    fontSize: 8,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+  },
+
+  amountValue: {
+    fontFamily: "InterBold",
+    fontSize: 18,
+    color: colors.accent,
+    marginTop: 2,
   },
 
   // =====================================================
