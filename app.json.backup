@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.truckassist.mechanic"
+      "package": "com.annamalaiyargramathupalagam.breakdownmechanicapp"
     },
     "web": {
       "output": "static",
@@ -45,9 +45,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "1101e23b-9c23-4e45-9dfc-788f61273670"
+        "projectId": "ba2a4a4c-30ac-4127-819a-baa2dac03ea2"
       }
-    },
-    "owner": "truckassist2026"
+    }
   }
 }
