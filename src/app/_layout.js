@@ -1,21 +1,12 @@
-import {
-  Stack,
-  usePathname,
-  useRouter,
-} from 'expo-router';
+import "../../web.css";
 
-import {
-  useEffect,
-} from 'react';
+import { Stack, usePathname, useRouter } from "expo-router";
 
-import {
-  ActivityIndicator,
-  View,
-} from 'react-native';
+import { useEffect, useState } from "react";
 
-import {
-  StatusBar,
-} from 'expo-status-bar';
+import { ActivityIndicator, View } from "react-native";
+
+import { StatusBar } from "expo-status-bar";
 
 import {
   Inter_400Regular,
@@ -23,200 +14,178 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
   useFonts,
-} from '@expo-google-fonts/inter';
+} from "@expo-google-fonts/inter";
 
-import {
-  SafeAreaProvider,
-  SafeAreaView,
-} from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  AuthProvider,
-  useAuth,
-} from '../context/AuthContext';
+import { AuthProvider, useAuth } from "../context/AuthContext";
 
-import colors from '../constants/colors';
+import * as SplashScreen from "expo-splash-screen";
 
+import colors from "../constants/colors";
+
+import LaunchScreen from "../components/LaunchScreen";
+
+// =========================================================
+// KEEP NATIVE SPLASH WHILE APP STARTS
+// =========================================================
+
+SplashScreen.preventAutoHideAsync();
 
 // =========================================================
 // ROOT LAYOUT
 // =========================================================
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    InterRegular: Inter_400Regular,
 
-  const [
-    fontsLoaded,
-  ] = useFonts({
+    InterMedium: Inter_500Medium,
 
-    InterRegular:
-      Inter_400Regular,
+    InterSemiBold: Inter_600SemiBold,
 
-    InterMedium:
-      Inter_500Medium,
-
-    InterSemiBold:
-      Inter_600SemiBold,
-
-    InterBold:
-      Inter_700Bold,
+    InterBold: Inter_700Bold,
   });
 
+  // =======================================================
+  // HIDE NATIVE SPLASH AFTER FONTS LOAD
+  // =======================================================
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  // =======================================================
+  // WAIT FOR FONTS
+  // =======================================================
 
   if (!fontsLoaded) {
-
     return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-
-        <ActivityIndicator
-          size="small"
-          color={
-            colors.accent
-          }
-        />
-
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color={colors.accent} />
       </View>
     );
   }
 
-
   return (
     <SafeAreaProvider>
-
       <AuthProvider>
-
-        <StatusBar
-          style="dark"
-          translucent={false}
-        />
-
-        <RootNavigator />
-
+        <AppContent />
       </AuthProvider>
-
     </SafeAreaProvider>
   );
 }
 
+// =========================================================
+// APP CONTENT
+// =========================================================
+
+function AppContent() {
+  const [launchFinished, setLaunchFinished] = useState(false);
+
+  // =======================================================
+  // FULL SCREEN LAUNCH SCREEN
+  // =======================================================
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLaunchFinished(true);
+    }, 1800);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
+  // =======================================================
+  // SHOW MECHANIC LAUNCH SCREEN
+  // =======================================================
+
+  if (!launchFinished) {
+    return (
+      <View style={styles.launchContainer}>
+        <LaunchScreen />
+      </View>
+    );
+  }
+
+  // =======================================================
+  // NORMAL APPLICATION
+  // =======================================================
+
+  return (
+    <>
+      <StatusBar style="dark" translucent={false} />
+
+      <RootNavigator />
+    </>
+  );
+}
 
 // =========================================================
 // ROUTER / AUTH PROTECTION
 // =========================================================
 
 function RootNavigator() {
+  const router = useRouter();
 
-  const router =
-    useRouter();
+  const pathname = usePathname();
 
-  const pathname =
-    usePathname();
-
-  const {
-    loading,
-    isAuthenticated,
-  } =
-    useAuth();
-
+  const { loading, isAuthenticated } = useAuth();
 
   // =======================================================
   // AUTH ROUTING
   // =======================================================
 
   useEffect(() => {
-
     if (loading) {
       return;
     }
 
+    const isLogin = pathname === "/login";
 
-    const isLogin =
-      pathname === '/login';
+    const isOtp = pathname === "/otp";
 
-    const isOtp =
-      pathname === '/otp';
+    const isPublic = isLogin || isOtp;
 
-
-    const isPublic =
-      isLogin ||
-      isOtp;
-
-
-    console.log(
-      '[Mechanic Router]',
-      {
-        pathname,
-        isAuthenticated,
-        isPublic,
-      }
-    );
-
+    console.log("[Mechanic Router]", {
+      pathname,
+      isAuthenticated,
+      isPublic,
+    });
 
     // =====================================================
     // NOT AUTHENTICATED
     // =====================================================
 
-    if (
-      !isAuthenticated &&
-      !isPublic
-    ) {
-
-      router.replace(
-        '/login'
-      );
+    if (!isAuthenticated && !isPublic) {
+      router.replace("/login");
 
       return;
     }
-
 
     // =====================================================
     // AUTHENTICATED
     // =====================================================
 
-    if (
-      isAuthenticated &&
-      isPublic
-    ) {
-
-      router.replace(
-        '/'
-      );
-
+    if (isAuthenticated && isPublic) {
+      router.replace("/");
     }
-
-  }, [
-    loading,
-    isAuthenticated,
-    pathname,
-  ]);
-
+  }, [loading, isAuthenticated, pathname]);
 
   // =======================================================
-  // LOADING
+  // AUTH LOADING
   // =======================================================
 
   if (loading) {
-
     return (
-      <View
-        style={
-          styles.loadingContainer
-        }
-      >
-
-        <ActivityIndicator
-          size="small"
-          color={
-            colors.accent
-          }
-        />
-
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color={colors.accent} />
       </View>
     );
   }
-
 
   // =======================================================
   // ROOT STACK
@@ -226,52 +195,46 @@ function RootNavigator() {
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor:
-          colors.background,
+        backgroundColor: colors.background,
       }}
-      edges={[
-        'top',
-        'bottom',
-      ]}
+      edges={["top", "bottom"]}
     >
-
       <Stack
         screenOptions={{
           headerShown: false,
 
-          animation:
-            'slide_from_right',
+          animation: "slide_from_right",
 
           contentStyle: {
-            backgroundColor:
-              colors.background,
+            backgroundColor: colors.background,
           },
         }}
       />
-
     </SafeAreaView>
   );
 }
-
 
 // =========================================================
 // STYLES
 // =========================================================
 
 const styles = {
-
   loadingContainer: {
-
     flex: 1,
-
-    backgroundColor:
-      colors.background,
-
-    alignItems:
-      'center',
-
-    justifyContent:
-      'center',
+    backgroundColor: colors.background,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
+  launchContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flex: 1,
+    backgroundColor: colors.background,
+    zIndex: 9999,
+    elevation: 9999,
+  },
 };
