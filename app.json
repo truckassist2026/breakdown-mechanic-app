@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "breakdown-mechanic-app",
+    "name": "Truck Assist Mechanic",
     "slug": "breakdown-mechanic-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,12 +11,6 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
       "predictiveBackGestureEnabled": false,
       "package": "com.truckassist.mechanic"
     },
@@ -29,9 +23,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F4F8FF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "resizeMode": "cover"
         }
       ],
       "expo-status-bar",
